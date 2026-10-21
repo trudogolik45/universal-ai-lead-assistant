@@ -1,0 +1,210 @@
+{
+  "id": "uala0tgCallback0",
+  "name": "Telegram callback",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "d4f0b2c1-8e3a-4b6d-9c2e-000000000001",
+      "name": "Receive update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "8a7c1e52-3b9d-4f60-a1d2-7e5b0c9f0001",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "telegram",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "d4f0b2c1-8e3a-4b6d-9c2e-000000000002",
+      "name": "Secret matches",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "t1",
+              "leftValue": "={{ !!$env.TELEGRAM_WEBHOOK_SECRET && $json.headers['x-telegram-bot-api-secret-token'] === $env.TELEGRAM_WEBHOOK_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d4f0b2c1-8e3a-4b6d-9c2e-000000000003",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        -100
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {}
+      }
+    },
+    {
+      "id": "d4f0b2c1-8e3a-4b6d-9c2e-000000000004",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "d4f0b2c1-8e3a-4b6d-9c2e-000000000005",
+      "name": "Parse button",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "// callback_query inline-кнопки → {callback_query_id, action, lead_id, chat_id}.\n// callback_data «<действие>:<lead_id>» рисует notify-lead. Прочие update и чужие данные — стоп.\nconst query = $input.first().json.body?.callback_query;\nif (!query || typeof query.data !== 'string') return [];\nconst [action, leadId] = query.data.split(':', 2);\nconst UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nif (!['resume', 'close'].includes(action) || !UUID.test(leadId ?? '')) return [];\nreturn [{\n  json: {\n    callback_query_id: query.id,\n    action,\n    lead_id: leadId,\n    chat_id: String(query.message?.chat?.id ?? ''),\n  },\n}];"
+      }
+    },
+    {
+      "id": "d4f0b2c1-8e3a-4b6d-9c2e-000000000006",
+      "name": "Apply button",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Кнопка из группы Заказчика. resume: Беседа handoff → open, Заявка collecting или qualified\n-- по обязательным полям. close: Заявка и Беседа closed (closed ставит только человек).\n-- Чужая группа, неизвестная Заявка или уже нажатая кнопка ничего не меняют: статусы null.\nwith target as (\n  select l.id as lead_id, v.id as conversation_id,\n    array(select f from unnest(c.required_fields) f where nullif(btrim(to_jsonb(l) ->> f), '') is null) as missing\n  from leads l\n  join companies c on c.id = l.company_id\n  join conversations v on v.id = l.conversation_id and v.company_id = l.company_id\n  where l.id = $1::uuid and c.telegram_chat_id = $2\n    and case $3::text when 'resume' then v.status = 'handoff' else v.status <> 'closed' end\n),\nconversation as (\n  update conversations v set status = case $3::text when 'resume' then 'open' else 'closed' end\n  from target\n  where v.id = target.conversation_id\n  returning v.status\n),\nlead as (\n  update leads l set\n    status = case when $3::text = 'close' then 'closed'\n      when cardinality(target.missing) = 0 then 'qualified' else 'collecting' end,\n    missing_fields = case when $3::text = 'close' then l.missing_fields else target.missing end\n  from target\n  where l.id = target.lead_id\n  returning l.status\n)\nselect (select status from conversation) as conversation_status, (select status from lead) as lead_status",
+        "options": {
+          "queryReplacement": "={{ [$json.lead_id, $json.chat_id, $json.action] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "d4f0b2c1-8e3a-4b6d-9c2e-000000000007",
+      "name": "Answer button (Telegram)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.TELEGRAM_API_BASE_URL }}/bot{{ $env.TELEGRAM_BOT_TOKEN }}/answerCallbackQuery",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ callback_query_id: $('Parse button').item.json.callback_query_id, text: ({ open: 'Беседа возвращена Ассистенту', closed: 'Заявка закрыта' })[$json.conversation_status] ?? 'Кнопка устарела: Заявка уже обработана' }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive update": {
+      "main": [
+        [
+          {
+            "node": "Secret matches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Secret matches": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200": {
+      "main": [
+        [
+          {
+            "node": "Parse button",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse button": {
+      "main": [
+        [
+          {
+            "node": "Apply button",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply button": {
+      "main": [
+        [
+          {
+            "node": "Answer button (Telegram)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
