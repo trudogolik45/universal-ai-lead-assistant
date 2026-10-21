@@ -33,6 +33,7 @@ services:
       META_PAGE_ACCESS_TOKEN: test-page-token
       OPENROUTER_API_KEY: test-openrouter-key
       TELEGRAM_BOT_TOKEN: test-telegram-token
+      TELEGRAM_WEBHOOK_SECRET: test-telegram-webhook-secret
       # Service account: ключ генерирует фикстура n8n_url (tests/google.py).
       GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
       GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:-}
