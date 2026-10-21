@@ -9,7 +9,7 @@ import pytest
 from tests.factories import create_company, open_conversation
 from tests.fake_server import Response
 from tests.polling import eventually, stays
-from tests.telegram import sent_to_telegram, telegram_fails
+from tests.telegram import SEND_MESSAGE_PATH, sent_to_telegram, telegram_fails
 
 # Значение из docker-compose.test.yml.
 RETRY_SECRET = "test-retry-secret"
@@ -104,7 +104,7 @@ def test_lead_missed_in_telegram_is_announced_once_telegram_recovers(db, fake, n
     eventually(lambda: sent_to_telegram(fake))
     stays(lambda: lead_column(db, lead_id, "telegram_sent_at") is None)
 
-    fake.respond("POST", "/telegram/bottest-telegram-token/sendMessage", Response(200, {"ok": True}))
+    fake.respond("POST", SEND_MESSAGE_PATH, Response(200, {"ok": True}))
     run_retry(n8n_url)
     eventually(lambda: lead_column(db, lead_id, "telegram_sent_at"))
 
