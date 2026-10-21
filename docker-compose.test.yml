@@ -1,0 +1,49 @@
+# Тестовый стенд: Postgres (вместо Supabase) и n8n той же версии, что в проде.
+# Поднимает и импортирует workflow фикстура tests/stand.py, руками — см. README.
+# Порты хоста случайные (0): параллельные стенды не пересекаются, адрес узнаём через `docker compose port`.
+# Имя проекта — COMPOSE_PROJECT_NAME (фикстура задаёт своё на каждый checkout).
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test
+    ports:
+      - "127.0.0.1:${STAND_POSTGRES_PORT:-0}:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "test"]
+      interval: 1s
+      retries: 30
+
+  n8n:
+    image: n8nio/n8n:${N8N_VERSION:-2.45.1}
+    environment:
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      GENERIC_TIMEZONE: Europe/Warsaw
+      # Ключ фиксирован: стенд одноразовый, credentials тестовые.
+      N8N_ENCRYPTION_KEY: test-stand-encryption-key
+      # Секреты: тестовые значения. Credentials Postgres импортирует tests/stand.py.
+      META_APP_SECRET: test-app-secret
+      META_VERIFY_TOKEN: test-verify-token
+      META_PAGE_ACCESS_TOKEN: test-page-token
+      OPENROUTER_API_KEY: test-openrouter-key
+      TELEGRAM_BOT_TOKEN: test-telegram-token
+      # Внешние API — фейк-сервер pytest на хосте (tests/fake_server.py).
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-http://host.docker.internal:9/openrouter}
+      META_GRAPH_BASE_URL: ${META_GRAPH_BASE_URL:-http://host.docker.internal:9/meta}
+      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-http://host.docker.internal:9/telegram}
+      GOOGLE_SHEETS_BASE_URL: ${GOOGLE_SHEETS_BASE_URL:-http://host.docker.internal:9/sheets}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${STAND_N8N_PORT:-0}:5678"
+    volumes:
+      - ./n8n/workflows:/workflows:ro
+    depends_on:
+      postgres:
+        condition: service_healthy

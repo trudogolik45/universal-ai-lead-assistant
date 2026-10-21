@@ -1,0 +1,109 @@
+"""Фейк внешних API (OpenRouter, Meta Graph, Telegram, Google Sheets, CRM) на хосте.
+
+Один HTTP-сервер, у каждого API свой префикс пути: /openrouter, /meta, /telegram, /sheets, /crm.
+n8n ходит сюда по базовым URL из env (`*_BASE_URL`), см. `FakeServer.base_urls`.
+
+Тест задаёт ответы через `respond` и читает полученные запросы через `requests`.
+Незаданный маршрут отвечает 200 и `{}`: записывающим API (Send API, Telegram) этого хватает.
+"""
+
+import json
+import threading
+from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# Имя env-переменной n8n → префикс пути фейка.
+BASE_URL_ENV = {
+    "OPENROUTER_BASE_URL": "/openrouter",
+    "META_GRAPH_BASE_URL": "/meta",
+    "TELEGRAM_API_BASE_URL": "/telegram",
+    "GOOGLE_SHEETS_BASE_URL": "/sheets",
+}
+
+# Хост фейка, каким его видит n8n из контейнера.
+CONTAINER_HOST = "host.docker.internal"
+
+
+@dataclass
+class Request:
+    method: str
+    path: str
+    headers: dict
+    body: bytes
+
+    def json(self):
+        return json.loads(self.body)
+
+
+@dataclass
+class Response:
+    status: int = 200
+    body: object = field(default_factory=dict)
+
+
+class FakeServer:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._routes: dict[tuple[str, str], list[Response]] = {}
+        self._requests: list[Request] = []
+        self._httpd = ThreadingHTTPServer(("0.0.0.0", 0), self._handler_class())
+        self.port = self._httpd.server_address[1]
+
+    def start(self):
+        threading.Thread(target=self._httpd.serve_forever, daemon=True).start()
+        return self
+
+    def stop(self):
+        self._httpd.shutdown()
+        self._httpd.server_close()
+
+    def reset(self):
+        with self._lock:
+            self._routes.clear()
+            self._requests.clear()
+
+    def respond(self, method: str, path: str, *responses: Response):
+        """Ответы на запросы по пути: по очереди, последний повторяется."""
+        with self._lock:
+            self._routes[(method.upper(), path)] = list(responses)
+
+    def requests(self, path_prefix: str = "/") -> list[Request]:
+        with self._lock:
+            return [r for r in self._requests if r.path.startswith(path_prefix)]
+
+    def container_url(self, path: str = "") -> str:
+        """URL фейка для n8n в контейнере (например, crm_webhook_url Заказчика)."""
+        return f"http://{CONTAINER_HOST}:{self.port}{path}"
+
+    def base_urls(self) -> dict[str, str]:
+        return {env: self.container_url(prefix) for env, prefix in BASE_URL_ENV.items()}
+
+    def _handle(self, request: Request) -> Response:
+        with self._lock:
+            self._requests.append(request)
+            queue = self._routes.get((request.method, request.path.split("?")[0]))
+            if not queue:
+                return Response()
+            return queue.pop(0) if len(queue) > 1 else queue[0]
+
+    def _handler_class(self):
+        server = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def _serve(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                request = Request(self.command, self.path, dict(self.headers), self.rfile.read(length))
+                response = server._handle(request)
+                payload = json.dumps(response.body).encode()
+                self.send_response(response.status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = _serve
+
+            def log_message(self, *args):
+                pass
+
+        return Handler
