@@ -10,7 +10,8 @@ PAGE_ID = "page-100"
 
 
 @pytest.fixture
-def meta(n8n_url):
+def meta(n8n_url, fake):
+    """Фейк сброшен: OpenRouter без ответов, поэтому Заявка остаётся new."""
     return MetaClient(n8n_url)
 
 
