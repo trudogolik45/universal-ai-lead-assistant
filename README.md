@@ -3,6 +3,11 @@
 AI-ассистент для входящих заявок малого бизнеса в Messenger. Спека: issue #1,
 термины: `GLOSSARY.md`, отличия от ТЗ: `docs/deviations.md`.
 
+## Инструкции для заказчика
+
+- [Meta (Messenger)](docs/meta-setup.md): приложение, страница, вебхук, токены.
+- [Google (Sheets)](docs/google-setup.md): service account, JSON-ключ, доступ к таблице.
+
 ## Запуск на VPS
 
 n8n работает на VPS `n3-vps` в Docker за Caddy: `https://n8n.n3spark.io`.
