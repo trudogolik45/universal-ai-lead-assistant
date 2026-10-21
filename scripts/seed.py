@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 import psycopg
+from psycopg import sql
 
 SEED_DIR = Path(__file__).resolve().parent.parent / "supabase" / "seed"
 DEMO_COMPANY_SLUG = "uniwersalny-serwis"
@@ -32,10 +33,8 @@ def seed(database_url, demo_page_id=None, telegram_chat_id=None, spreadsheet_id=
 def bind_delivery(conn, column, value):
     if not value:
         return
-    conn.execute(
-        f"update companies set {column} = %s where slug = any(%s)",
-        (value, list(SEED_COMPANY_SLUGS)),
-    )
+    query = sql.SQL("update companies set {} = %s where slug = any(%s)").format(sql.Identifier(column))
+    conn.execute(query, (value, list(SEED_COMPANY_SLUGS)))
 
 
 if __name__ == "__main__":

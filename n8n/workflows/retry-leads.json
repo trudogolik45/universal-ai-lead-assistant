@@ -131,7 +131,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Заявки, не дошедшие до Канала доставки, который есть у Заказчика.\n-- Sheets — только с таблицей: deliver-lead без неё каждый раз слал бы CRM-webhook.\n-- Telegram отсекает и сам notify-lead (telegram_sent_at, telegram_chat_id).\nselect l.id as lead_id,\n  (l.sheets_delivered_at is null and co.sheets_spreadsheet_id is not null) as sheets_pending\nfrom leads l\njoin companies co on co.id = l.company_id\nwhere l.status in ('qualified', 'needs_human')\n  and ((l.sheets_delivered_at is null and co.sheets_spreadsheet_id is not null)\n    or (l.telegram_sent_at is null and co.telegram_chat_id is not null))\norder by l.created_at",
+        "query": "-- Заявки, не дошедшие до Канала доставки, который есть у Заказчика. Свежие (2 минуты) ещё\n-- доставляет основной поток. Sheets — только qualified и с таблицей, как основной поток.\n-- Telegram: qualified — «Новая заявка» (telegram_sent_at), needs_human — сводка (handoff_sent_at);\n-- отметки проверяет и сам notify-lead.\nwith pending as (\n  select l.id, l.created_at,\n    (l.status = 'qualified' and l.sheets_delivered_at is null and co.sheets_spreadsheet_id is not null)\n      as sheets_pending,\n    (co.telegram_chat_id is not null and case l.status when 'qualified' then l.telegram_sent_at is null\n      else l.handoff_sent_at is null end) as telegram_pending\n  from leads l\n  join companies co on co.id = l.company_id\n  where l.status in ('qualified', 'needs_human') and l.updated_at < now() - interval '2 minutes'\n)\nselect id as lead_id, sheets_pending\nfrom pending\nwhere sheets_pending or telegram_pending\norder by created_at",
         "options": {}
       },
       "credentials": {
@@ -284,6 +284,72 @@
           "name": "Supabase"
         }
       }
+    },
+    {
+      "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000012",
+      "name": "Find missed AI alerts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        400
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Алерты «AI не отвечает», не дошедшие до группы Заказчика. Свежие (2 минуты) шлёт основной поток.\nselect m.id as message_id\nfrom messages m\njoin companies c on c.id = m.company_id\nwhere m.ai_failed_at < now() - interval '2 minutes' and m.ai_alert_sent_at is null\n  and c.telegram_chat_id is not null\norder by m.ai_failed_at",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000013",
+      "name": "Alert AI failure",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        400
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0aiAlert0000",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.message_id }}"
+          },
+          "matchingColumns": [
+            "message_id"
+          ],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
     }
   ],
   "connections": {
@@ -350,6 +416,11 @@
             "node": "Close silent conversations",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Find missed AI alerts",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -375,6 +446,17 @@
         [
           {
             "node": "Deliver lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find missed AI alerts": {
+      "main": [
+        [
+          {
+            "node": "Alert AI failure",
             "type": "main",
             "index": 0
           }
