@@ -1,0 +1,54 @@
+# Traefik (k3s) держит публичные 80/443 на VPS. Для n8n.n3spark.io он не
+# терминирует TLS, а пропускает поток на Caddy (хост, порт 8443).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: uala
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: caddy
+  namespace: uala
+spec:
+  ports:
+    - name: https
+      port: 8443
+      targetPort: 8443
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: caddy-host
+  namespace: uala
+  labels:
+    kubernetes.io/service-name: caddy
+addressType: IPv4
+ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+endpoints:
+  # Адрес хоста в сети подов (cni0).
+  - addresses:
+      - 10.42.0.1
+    # Без явных условий traefik считает адрес нерабочим.
+    conditions:
+      ready: true
+      serving: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: n8n
+  namespace: uala
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: HostSNI(`n8n.n3spark.io`)
+      services:
+        - name: caddy
+          port: 8443
+  tls:
+    passthrough: true

@@ -1,0 +1,42 @@
+# Прод-стек на VPS n3-vps: n8n за Caddy.
+# Публичные 80/443 держит traefik из k3s. Для n8n.n3spark.io он пропускает TLS
+# насквозь (traefik-passthrough.yaml) на Caddy :8443. Caddy сам получает
+# сертификат (TLS-ALPN-01) и проксирует на n8n.
+name: uala
+
+services:
+  n8n:
+    image: n8nio/n8n:${N8N_VERSION:-2.45.1}
+    restart: unless-stopped
+    # Все переменные .env видны нодам как $env.*.
+    env_file: ${ENV_FILE:-.env}
+    environment:
+      N8N_HOST: ${N8N_DOMAIN:?N8N_DOMAIN не задан}
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: https
+      N8N_PROXY_HOPS: "1"
+      WEBHOOK_URL: https://${N8N_DOMAIN}/
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+    ports:
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  caddy:
+    image: caddy:${CADDY_VERSION:-2.11}
+    restart: unless-stopped
+    # Сеть хоста: порт 8443 снаружи закрыт ufw, открыт только подам k3s (cni0).
+    network_mode: host
+    environment:
+      N8N_DOMAIN: ${N8N_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - n8n
+
+volumes:
+  n8n_data:
+  caddy_data:
+  caddy_config:
