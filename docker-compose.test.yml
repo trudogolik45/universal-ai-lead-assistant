@@ -33,11 +33,15 @@ services:
       META_PAGE_ACCESS_TOKEN: test-page-token
       OPENROUTER_API_KEY: test-openrouter-key
       TELEGRAM_BOT_TOKEN: test-telegram-token
+      # Service account: ключ генерирует фикстура n8n_url (tests/google.py).
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
+      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:-}
       # Внешние API — фейк-сервер pytest на хосте (tests/fake_server.py).
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-http://host.docker.internal:9/openrouter}
       META_GRAPH_BASE_URL: ${META_GRAPH_BASE_URL:-http://host.docker.internal:9/meta}
       TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-http://host.docker.internal:9/telegram}
       GOOGLE_SHEETS_BASE_URL: ${GOOGLE_SHEETS_BASE_URL:-http://host.docker.internal:9/sheets}
+      GOOGLE_OAUTH_BASE_URL: ${GOOGLE_OAUTH_BASE_URL:-http://host.docker.internal:9/google-oauth}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

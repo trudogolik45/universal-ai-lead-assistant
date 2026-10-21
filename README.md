@@ -60,6 +60,11 @@ credentials и все `n8n/workflows/*.json`, публикуют их и пос�
   -f docker-compose.test.yml logs n8n`, порт n8n: `... port n8n 5678`).
 - Имя compose-проекта — `COMPOSE_PROJECT_NAME`, по умолчанию своё на каждый checkout;
   порты хоста случайные, поэтому параллельные стенды не пересекаются.
+- Настоящая Google-таблица (`tests/test_lead_delivery_google.py`): задать
+  `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` и
+  `GOOGLE_SHEETS_TEST_SPREADSHEET_ID` (таблица расшарена на service account как Editor). Тест
+  поднимает второй стенд, пишет Заявку на свой временный лист, читает её обратно и удаляет лист.
+  Без этих переменных тест пропускается.
 
 ### Workflow n8n
 
