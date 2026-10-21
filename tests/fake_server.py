@@ -24,6 +24,8 @@ BASE_URL_ENV = {
 
 # Хост фейка, каким его видит n8n из контейнера.
 CONTAINER_HOST = "host.docker.internal"
+# Сколько фейк ждёт, пока клиент закроет соединение после ответа.
+CLIENT_CLOSE_TIMEOUT = 60
 
 
 @dataclass
@@ -92,6 +94,23 @@ class FakeServer:
         server = self
 
         class Handler(BaseHTTPRequestHandler):
+            # Соединение закрывает клиент: закрывший первым держит TIME_WAIT. Закрой первым фейк,
+            # TIME_WAIT достанется сети Docker Desktop, а ядро контейнера n8n снова возьмёт тот же
+            # порт к фейку — SYN теряется ~30 с, запрос опаздывает в следующий тест после сброса фейка.
+            protocol_version = "HTTP/1.1"
+
+            def handle(self):
+                super().handle()
+                self._wait_client_close()
+
+            def _wait_client_close(self):
+                self.connection.settimeout(CLIENT_CLOSE_TIMEOUT)
+                try:
+                    while self.connection.recv(4096):
+                        pass
+                except OSError:
+                    pass
+
             def _serve(self):
                 length = int(self.headers.get("Content-Length") or 0)
                 request = Request(self.command, self.path, dict(self.headers), self.rfile.read(length))

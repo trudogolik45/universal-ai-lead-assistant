@@ -56,8 +56,9 @@
 | Сиды: три польских профиля, идемпотентность, правки Заказчика не затираются | `test_seed.py` (6) | passed |
 | Экспорт workflow: байт в байт с репо, без секретов и данных прогонов | `test_n8n_sync.py` (4) | passed |
 
-Известные флаки (под нагрузкой полного прогона цепочка вебхука на стенде доходила до 10+ с):
-`test_lead_delivery.py::test_failed_sheets_write_leaves_lead_undelivered`,
-`test_handoff.py::test_resume_button_returns_conversation_to_assistant`. Таймаут `eventually`
-поднят до 30 с; в этом прогоне не воспроизвелись. `test_handoff.py::test_message_after_close_opens_new_conversation_and_lead`
+Флаки «не дождались за 30 с» в случайных тестах и `test_crm_webhook_is_not_called_when_not_set`
+(запоздалый CRM POST предыдущего теста) — одна причина: фейк закрывал соединение первым, TIME_WAIT
+оставался в сети Docker Desktop, а n8n снова брал тот же порт к фейку. SYN терялся ~30–36 с, запрос
+опаздывал в следующий тест после сброса фейка. Теперь соединение закрывает n8n (`tests/fake_server.py`,
+`tests/test_fake_server.py`). `test_handoff.py::test_message_after_close_opens_new_conversation_and_lead`
 проверял статус новой Заявки до ответа AI — теперь ждёт его через `eventually`.
