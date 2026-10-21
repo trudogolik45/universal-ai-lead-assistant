@@ -550,6 +550,46 @@
       "parameters": {}
     },
     {
+      "id": "b9a1c5b0-0d6b-4a43-9a0e-000000000601",
+      "name": "Deliver lead",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3520,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0deliverLead",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
       "id": "b9a1c5b0-0d6b-4a43-9a0e-000000000026",
       "name": "Needs human",
       "type": "n8n-nodes-base.if",
@@ -844,6 +884,17 @@
           }
         ],
         []
+      ]
+    },
+    "Lead qualified first time": {
+      "main": [
+        [
+          {
+            "node": "Deliver lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   }

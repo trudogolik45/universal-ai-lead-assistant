@@ -1,0 +1,500 @@
+{
+  "id": "uala0deliverLead",
+  "name": "deliver-lead",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000601",
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "lead_id"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000602",
+      "name": "Load lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Заявка к доставке с Каналом доставки Заказчика. Уже на листе = 0 строк = стоп: повтор не пишет вторую строку.\nselect\n  l.id as lead_id, l.company_id, l.conversation_id, c.channel, l.status,\n  l.name, l.contact, l.service, l.description, l.desired_date, l.intent, l.created_at,\n  to_char(now() at time zone 'Europe/Warsaw', 'YYYY-MM-DD HH24:MI') as delivered_on,\n  co.sheets_spreadsheet_id, co.sheets_sheet_name, co.crm_webhook_url\nfrom leads l\njoin conversations c on c.id = l.conversation_id and c.company_id = l.company_id\njoin companies co on co.id = l.company_id\nwhere l.id = $1::uuid and l.sheets_delivered_at is null",
+        "options": {
+          "queryReplacement": "={{ [$json.lead_id] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000603",
+      "name": "Spreadsheet set",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c63",
+              "leftValue": "={{ !!$json.sheets_spreadsheet_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000604",
+      "name": "Prepare Sheets request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// JWT service account (RS256) для токена Google и данные строки листа.\nconst crypto = require('crypto');\nconst lead = $json;\nconst tokenUrl = `${$env.GOOGLE_OAUTH_BASE_URL}/token`;\n// В .env ключ одной строкой: переводы строк как \\n.\nconst privateKey = ($env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || '').replace(/\\\\n/g, '\\n');\nconst now = Math.floor(Date.now() / 1000);\nconst part = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');\nconst unsigned = `${part({ alg: 'RS256', typ: 'JWT' })}.${part({\n  iss: $env.GOOGLE_SERVICE_ACCOUNT_EMAIL,\n  scope: 'https://www.googleapis.com/auth/spreadsheets',\n  aud: tokenUrl,\n  iat: now,\n  exp: now + 3600,\n})}`;\nconst signature = crypto.createSign('RSA-SHA256').update(unsigned).sign(privateKey).toString('base64url');\n\n// Имя листа в A1-нотации: в кавычках, кавычка внутри удваивается.\nconst range = encodeURIComponent(`'${lead.sheets_sheet_name.replace(/'/g, \"''\")}'!A1`);\nconst header = ['Дата', 'Канал', 'Имя', 'Контакт', 'Услуга', 'Описание', 'Желаемая дата', 'Намерение', 'Статус', 'ID беседы'];\nconst row = [\n  lead.delivered_on, lead.channel, lead.name, lead.contact, lead.service, lead.description,\n  lead.desired_date, lead.intent, lead.status, lead.conversation_id,\n].map((value) => value ?? '');\n\nreturn { json: { token_url: tokenUrl, assertion: `${unsigned}.${signature}`, range, header, row } };"
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000605",
+      "name": "Get Google token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.token_url }}",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "urn:ietf:params:oauth:grant-type:jwt-bearer"
+            },
+            {
+              "name": "assertion",
+              "value": "={{ $json.assertion }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000606",
+      "name": "Get spreadsheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "url": "={{ $env.GOOGLE_SHEETS_BASE_URL }}/v4/spreadsheets/{{ $('Load lead').item.json.sheets_spreadsheet_id }}?fields=sheets.properties.title",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Google token').item.json.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000607",
+      "name": "Sheet exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c67",
+              "leftValue": "={{ ($json.sheets || []).some((sheet) => sheet.properties.title === $('Load lead').item.json.sheets_sheet_name) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000608",
+      "name": "Create sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GOOGLE_SHEETS_BASE_URL }}/v4/spreadsheets/{{ $('Load lead').item.json.sheets_spreadsheet_id }}:batchUpdate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Google token').item.json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requests: [{ addSheet: { properties: { title: $('Load lead').item.json.sheets_sheet_name } } }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000609",
+      "name": "Write header",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GOOGLE_SHEETS_BASE_URL }}/v4/spreadsheets/{{ $('Load lead').item.json.sheets_spreadsheet_id }}/values/{{ $('Prepare Sheets request').item.json.range }}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Google token').item.json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [$('Prepare Sheets request').item.json.header] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000610",
+      "name": "Append lead row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GOOGLE_SHEETS_BASE_URL }}/v4/spreadsheets/{{ $('Load lead').item.json.sheets_spreadsheet_id }}/values/{{ $('Prepare Sheets request').item.json.range }}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Google token').item.json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [$('Prepare Sheets request').item.json.row] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000611",
+      "name": "Mark delivered",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2200,
+        200
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Строка на листе: Заявка доставлена в Sheets.\nupdate leads set sheets_delivered_at = now(), updated_at = now()\nwhere id = $1::uuid and sheets_delivered_at is null\nreturning id as lead_id",
+        "options": {
+          "queryReplacement": "={{ [$('Load lead').item.json.lead_id] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000612",
+      "name": "CRM webhook set",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c612",
+              "leftValue": "={{ !!$('Load lead').item.json.crm_webhook_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d6a1c5b0-0d6b-4a43-9a0e-000000000613",
+      "name": "Send to CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Load lead').item.json.crm_webhook_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((({ lead_id, company_id, conversation_id, channel, status, name, contact, service, description, desired_date, intent, created_at }) => ({ lead_id, company_id, conversation_id, channel, status, name, contact, service, description, desired_date, intent, created_at }))($('Load lead').item.json)) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Load lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load lead": {
+      "main": [
+        [
+          {
+            "node": "Spreadsheet set",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Spreadsheet set": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sheets request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CRM webhook set",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sheets request": {
+      "main": [
+        [
+          {
+            "node": "Get Google token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Google token": {
+      "main": [
+        [
+          {
+            "node": "Get spreadsheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get spreadsheet": {
+      "main": [
+        [
+          {
+            "node": "Sheet exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheet exists": {
+      "main": [
+        [
+          {
+            "node": "Append lead row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create sheet": {
+      "main": [
+        [
+          {
+            "node": "Write header",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write header": {
+      "main": [
+        [
+          {
+            "node": "Append lead row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append lead row": {
+      "main": [
+        [
+          {
+            "node": "Mark delivered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark delivered": {
+      "main": [
+        [
+          {
+            "node": "CRM webhook set",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM webhook set": {
+      "main": [
+        [
+          {
+            "node": "Send to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  }
+}

@@ -5,6 +5,7 @@ import pytest
 
 from scripts.migrate import migrate
 from tests.fake_server import FakeServer
+from tests.google import ServiceAccount
 from tests.stand import Stand, docker_available
 
 
@@ -45,12 +46,20 @@ def fake_server():
 
 @pytest.fixture
 def fake(fake_server):
-    """Фейк внешних API без заданных ответов и записанных запросов."""
+    """Фейк внешних API без заданных ответов и записанных запросов.
+    Сброс и после теста: заданные ответы не утекают в тесты, которые фейк не берут."""
     fake_server.reset()
-    return fake_server
+    yield fake_server
+    fake_server.reset()
 
 
 @pytest.fixture(scope="session")
-def n8n_url(stand, database_url, fake_server):
+def service_account():
+    """Service account Google стенда: ключ свой на прогон, фейк проверяет им подпись JWT."""
+    return ServiceAccount.generate()
+
+
+@pytest.fixture(scope="session")
+def n8n_url(stand, database_url, fake_server, service_account):
     """n8n стенда со всеми workflow из n8n/workflows, внешние API смотрят на фейк."""
-    return stand.up_n8n(fake_server.base_urls())
+    return stand.up_n8n({**fake_server.base_urls(), **service_account.env()})

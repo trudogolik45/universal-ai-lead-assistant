@@ -40,8 +40,8 @@ def default_project_name() -> str:
 
 
 class Stand:
-    def __init__(self):
-        self.project = os.environ.get("COMPOSE_PROJECT_NAME") or default_project_name()
+    def __init__(self, project: str | None = None):
+        self.project = project or os.environ.get("COMPOSE_PROJECT_NAME") or default_project_name()
         self.env: dict[str, str] = {}
 
     def compose(self, *args: str, input: str | None = None) -> str:
@@ -64,9 +64,9 @@ class Stand:
         self.compose("up", "-d", "--wait", "postgres")
         return f"postgresql://{PG_AUTH}@{self.host_url('postgres', 5432)}/test"
 
-    def up_n8n(self, base_urls: dict[str, str]) -> str:
-        """Поднимает n8n с базовыми URL внешних API и публикует все workflow. Возвращает URL n8n."""
-        self.env.update(base_urls)
+    def up_n8n(self, env: dict[str, str]) -> str:
+        """Поднимает n8n с env (базовые URL внешних API, ключи) и публикует все workflow. Возвращает URL n8n."""
+        self.env.update(env)
         self.compose("up", "-d", "--force-recreate", "n8n")
         wait_ready(self.n8n_url())
         self.import_credentials()
