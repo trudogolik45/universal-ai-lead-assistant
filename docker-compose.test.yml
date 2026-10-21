@@ -34,6 +34,9 @@ services:
       OPENROUTER_API_KEY: test-openrouter-key
       TELEGRAM_BOT_TOKEN: test-telegram-token
       TELEGRAM_WEBHOOK_SECRET: test-telegram-webhook-secret
+      RETRY_WEBHOOK_SECRET: test-retry-secret
+      # Расписание retry в тестах не срабатывает (1 января): прогоны только по вебхуку.
+      RETRY_SCHEDULE_CRON: ${RETRY_SCHEDULE_CRON:-0 0 1 1 *}
       # Service account: ключ генерирует фикстура n8n_url (tests/google.py).
       GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
       GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:-}

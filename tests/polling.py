@@ -3,8 +3,9 @@
 import time
 
 
-def eventually(probe, timeout: float = 10, interval: float = 0.2):
-    """Ждёт, пока probe() вернёт истину, и возвращает это значение."""
+def eventually(probe, timeout: float = 30, interval: float = 0.2):
+    """Ждёт, пока probe() вернёт истину, и возвращает это значение.
+    Запас по времени: под нагрузкой полного прогона цепочка вебхука на стенде доходила до 10+ с."""
     deadline = time.monotonic() + timeout
     while not (value := probe()) and time.monotonic() < deadline:
         time.sleep(interval)
