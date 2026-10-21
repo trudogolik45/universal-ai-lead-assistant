@@ -3,6 +3,7 @@ import uuid
 import pytest
 
 from tests.factories import create_company
+from tests.fake_server import Response
 from tests.meta import MetaClient, messenger_payload
 from tests.openrouter import assistant_reply, completion_requests, respond_with
 from tests.polling import eventually, stays
@@ -96,6 +97,10 @@ def telegram_sent(db):
     return db.execute("select count(*) from leads where telegram_sent_at is not null").fetchone()[0]
 
 
+def handoff_sent(db):
+    return db.execute("select count(*) from leads where handoff_sent_at is not null").fetchone()[0]
+
+
 def test_handoff_summary_with_resume_and_close_buttons_goes_to_customer_group(db, fake, meta, client):
     respond_with(fake, handoff_reply())
 
@@ -107,7 +112,7 @@ def test_handoff_summary_with_resume_and_close_buttons_goes_to_customer_group(db
     for expected in ("Handoff Co", client, "Brak ceny w bazie wiedzy", "Ile kosztuje przewóz pianina?"):
         assert expected in summary["text"]
     assert callback_data(summary) == [f"resume:{lead}", f"close:{lead}"]
-    eventually(lambda: telegram_sent(db))
+    eventually(lambda: handoff_sent(db))
 
 
 def test_handoff_after_announced_qualified_lead_still_sends_summary(db, fake, meta, client):
@@ -130,12 +135,16 @@ def hand_off(db, fake, meta, client, *replies):
     """Беседа Клиента передана человеку; replies — следующие ответы AI после передачи."""
     respond_with(fake, handoff_reply(), *replies)
     meta.post(messenger_payload(PAGE_ID, client, "Ile kosztuje przewóz pianina?"))
-    eventually(lambda: telegram_sent(db))
+    eventually(lambda: handoff_sent(db))
     return lead_id(db)
 
 
 def lead_status(db):
     return db.execute("select status from leads").fetchone()[0]
+
+
+def lead_statuses(db):
+    return [row[0] for row in db.execute("select status from leads order by created_at").fetchall()]
 
 
 def test_client_message_in_handoff_is_saved_and_left_to_human(db, fake, meta, client):
@@ -169,7 +178,7 @@ def test_resume_button_with_all_required_fields_makes_lead_qualified(db, fake, m
     meta.post(messenger_payload(PAGE_ID, client, "Anna, +48 600 100 200, szafa z IKEA w piątek rano"))
     eventually(lambda: len(sent_texts(fake)) == 1)
     meta.post(messenger_payload(PAGE_ID, client, "Ile kosztuje przewóz pianina?"))
-    eventually(lambda: telegram_sent(db))
+    eventually(lambda: handoff_sent(db))
 
     telegram.press(f"resume:{lead_id(db)}", CHAT_ID)
 
@@ -195,8 +204,7 @@ def test_message_after_close_opens_new_conversation_and_lead(db, fake, meta, tel
     meta.post(messenger_payload(PAGE_ID, client, "Dzień dobry, mam nowe pytanie"))
 
     assert eventually(lambda: conversation_statuses(db) == ["closed", "open"])
-    statuses = [row[0] for row in db.execute("select status from leads order by created_at").fetchall()]
-    assert statuses == ["closed", "collecting"]
+    assert eventually(lambda: lead_statuses(db) == ["closed", "collecting"])
     assert eventually(lambda: "Dzień dobry!" in sent_texts(fake))
 
 
@@ -217,3 +225,52 @@ def test_button_from_other_group_does_not_touch_lead(db, fake, meta, telegram, c
     eventually(lambda: answered_callbacks(fake))
     assert conversation_statuses(db) == ["handoff"]
     assert lead_status(db) == "needs_human"
+
+
+SPREADSHEET_ID = "spreadsheet-800"
+SPREADSHEET_PATH = f"/sheets/v4/spreadsheets/{SPREADSHEET_ID}"
+
+
+@pytest.fixture
+def google(db, fake, company):
+    """У Заказчика есть таблица, Google отдаёт токен, лист Leads уже есть."""
+    db.execute("update companies set sheets_spreadsheet_id = %s where id = %s", (SPREADSHEET_ID, company))
+    fake.respond("POST", "/google-oauth/token", Response(200, {"access_token": "t", "expires_in": 3600}))
+    fake.respond("GET", SPREADSHEET_PATH, Response(200, {"sheets": [{"properties": {"title": "Leads"}}]}))
+    return fake
+
+
+def sheet_appends(fake):
+    return [r for r in fake.requests(SPREADSHEET_PATH + "/values/") if r.method == "POST"]
+
+
+def new_lead_announcements(fake):
+    return [m for m in sent_to_telegram(fake) if m["text"].startswith("Новая заявка")]
+
+
+def test_resume_to_qualified_announces_new_lead_and_writes_it_to_sheet(db, google, meta, telegram, client):
+    respond_with(google, assistant_reply(intent="booking", lead_data=FULL_LEAD), handoff_reply())
+    meta.post(messenger_payload(PAGE_ID, client, "Anna, +48 600 100 200, szafa z IKEA w piątek rano"))
+    eventually(lambda: len(sent_texts(google)) == 1)
+    meta.post(messenger_payload(PAGE_ID, client, "Ile kosztuje przewóz pianina?"))
+    eventually(lambda: handoff_sent(db))
+
+    telegram.press(f"resume:{lead_id(db)}", CHAT_ID)
+
+    announcement = eventually(lambda: new_lead_announcements(google))[0]
+    assert callback_data(announcement) == [f"close:{lead_id(db)}"]
+    eventually(lambda: sheet_appends(google) and telegram_sent(db))
+    stays(lambda: len(new_lead_announcements(google)) == 1 and len(sheet_appends(google)) == 1)
+
+
+def test_lead_qualified_by_assistant_after_resume_is_announced(db, fake, meta, telegram, client):
+    qualified = assistant_reply(intent="booking", lead_data=FULL_LEAD, qualified=True)
+    lead = hand_off(db, fake, meta, client, qualified)
+    telegram.press(f"resume:{lead}", CHAT_ID)
+    eventually(lambda: conversation_statuses(db) == ["open"])
+    assert lead_status(db) == "collecting"
+
+    meta.post(messenger_payload(PAGE_ID, client, "Anna, +48 600 100 200, szafa z IKEA w piątek rano"))
+
+    assert eventually(lambda: new_lead_announcements(fake))
+    eventually(lambda: telegram_sent(db))

@@ -39,7 +39,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Заявка ещё не отправлена в Telegram и у Заказчика есть группа; иначе 0 строк = стоп.\n-- history — последние Сообщения Беседы для сводки Передачи человеку.\nselect l.id as lead_id, l.status, l.handoff_reason, c.name as company_name, c.telegram_chat_id,\n  v.channel, v.sender_id, l.intent,\n  l.name, l.contact, l.service, l.description, l.desired_date,\n  (select coalesce(jsonb_agg(jsonb_build_object('direction', h.direction, 'text', h.text) order by h.created_at), '[]')\n   from (select direction, text, created_at from messages\n         where conversation_id = v.id order by created_at desc limit 10) h) as history\nfrom leads l\njoin companies c on c.id = l.company_id\njoin conversations v on v.id = l.conversation_id and v.company_id = l.company_id\nwhere l.id = $1::uuid and l.telegram_sent_at is null and c.telegram_chat_id is not null",
+        "query": "-- Уведомление ещё не отправлено и у Заказчика есть группа; иначе 0 строк = стоп.\n-- needs_human — сводка Передачи человеку (handoff_sent_at), qualified — «Новая заявка» (telegram_sent_at).\n-- history — последние Сообщения Беседы для сводки Передачи человеку.\nselect l.id as lead_id, l.status, l.handoff_reason, c.name as company_name, c.telegram_chat_id,\n  v.channel, v.sender_id, l.intent,\n  l.name, l.contact, l.service, l.description, l.desired_date,\n  (select coalesce(jsonb_agg(jsonb_build_object('direction', h.direction, 'text', h.text) order by h.created_at), '[]')\n   from (select direction, text, created_at from messages\n         where conversation_id = v.id order by created_at desc limit 10) h) as history\nfrom leads l\njoin companies c on c.id = l.company_id\njoin conversations v on v.id = l.conversation_id and v.company_id = l.company_id\nwhere l.id = $1::uuid and c.telegram_chat_id is not null\n  and case l.status when 'needs_human' then l.handoff_sent_at is null\n    when 'qualified' then l.telegram_sent_at is null else false end",
         "options": {
           "queryReplacement": "={{ [$json.lead_id] }}"
         }
@@ -96,9 +96,9 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Только после успешного sendMessage: ошибка Bot API остановит workflow раньше.\nupdate leads set telegram_sent_at = now()\nwhere id = $1::uuid and telegram_sent_at is null\nreturning id as lead_id, telegram_sent_at",
+        "query": "-- Только после успешного sendMessage: ошибка Bot API остановит workflow раньше.\n-- Отмечается то уведомление, что ушло: по статусу Заявки на момент Load lead.\nupdate leads set\n  handoff_sent_at = case when $2 = 'needs_human' then now() else handoff_sent_at end,\n  telegram_sent_at = case when $2 = 'needs_human' then telegram_sent_at else now() end\nwhere id = $1::uuid\nreturning id as lead_id, telegram_sent_at, handoff_sent_at",
         "options": {
-          "queryReplacement": "={{ [$('Load lead').item.json.lead_id] }}"
+          "queryReplacement": "={{ [$('Load lead').item.json.lead_id, $('Load lead').item.json.status] }}"
         }
       },
       "credentials": {

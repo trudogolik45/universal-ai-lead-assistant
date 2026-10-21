@@ -25,8 +25,9 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 | `meta-webhook` | `POST /webhook/meta` | Подпись Meta → Заказчик по странице → Сообщение в Беседу → OpenRouter → ответ Клиенту, Заявка, Передача человеку |
 | `deliver-lead` | вызов из других workflow | Заявка в Google-таблицу, затем в CRM-webhook |
 | `notify-lead` | вызов из других workflow | Уведомление о Заявке или Передаче человеку в группу Telegram |
-| `telegram-callback` | `POST /webhook/telegram` | Кнопки «Вернуть ассистенту» и «Закрыть» |
-| `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Дозапись недоставленных Заявок, закрытие Бесед после 7 дней тишины |
+| `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram |
+| `telegram-callback` | `POST /webhook/telegram` | Кнопки «Вернуть ассистенту» и «Закрыть»; возврат с полной Заявкой доставляет и объявляет её |
+| `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Дозапись недоставленных Заявок и алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
 
 Секреты — только в `.env` на VPS и в credentials n8n; в репо их нет. Имена и назначение всех
 переменных — `.env.example`.
@@ -138,6 +139,10 @@ curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
 `retry-leads` идёт по расписанию (`RETRY_SCHEDULE_CRON`, по умолчанию раз в 5 минут). Запустить
 сразу: `curl -X POST https://n8n.n3spark.io/webhook/retry -H "X-Retry-Secret: $RETRY_WEBHOOK_SECRET"`
 (пустой секрет — ручной запуск закрыт).
+
+Retry берёт только то, что не менялось последние 2 минуты: свежее ещё доставляет основной поток.
+В таблицу дописываются только `qualified` Заявки; в Telegram — «Новая заявка» для `qualified`,
+сводка Передачи человеку для `needs_human` и недошедшие алерты «AI не отвечает».
 
 ## Правка workflow
 

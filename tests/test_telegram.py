@@ -7,7 +7,8 @@ from tests.fake_server import Response
 from tests.meta import MetaClient, messenger_payload
 from tests.openrouter import assistant_reply, respond_with
 from tests.polling import eventually, stays
-from tests.telegram import callback_data, sent_to_telegram, telegram_fails
+from tests.retry import run_retry
+from tests.telegram import SEND_MESSAGE_PATH, callback_data, sent_to_telegram, telegram_fails
 
 PAGE_ID = "page-700"
 SEND_API_PATH = "/meta/me/messages"
@@ -53,6 +54,10 @@ def marked_for_ai_alert(db):
     return db.execute("select count(*) from messages where ai_failed_at is not null").fetchone()[0]
 
 
+def ai_alert_sent(db):
+    return db.execute("select count(*) from messages where ai_alert_sent_at is not null").fetchone()[0]
+
+
 def sent_messages(fake):
     return fake.requests(SEND_API_PATH)
 
@@ -95,6 +100,15 @@ def test_failed_telegram_delivery_leaves_lead_unsent_and_client_answered(db, fak
     stays(lambda: telegram_sent_lead_id(db) is None)
 
 
+def test_lead_is_announced_even_when_reply_to_client_fails(db, fake, meta, client):
+    respond_with(fake, qualified_reply())
+    fake.respond("POST", SEND_API_PATH, Response(500, {"error": {"message": "Send API down"}}))
+
+    meta.post(messenger_payload(PAGE_ID, client, "Anna, +48 600 100 200, szafa z IKEA w piątek rano"))
+
+    assert eventually(lambda: telegram_sent_lead_id(db))
+
+
 def test_two_failed_ai_calls_alert_customer_group_with_last_message(db, fake, meta, client):
     respond_with(fake, Response(500, {}))
 
@@ -104,7 +118,25 @@ def test_two_failed_ai_calls_alert_customer_group_with_last_message(db, fake, me
     assert alert["chat_id"] == CHAT_ID
     for expected in ("Telegram Co", client, "Ile kosztuje montaż?"):
         assert expected in alert["text"]
+    eventually(lambda: ai_alert_sent(db))
     stays(lambda: len(sent_to_telegram(fake)) == 1)
+
+
+def test_ai_alert_lost_to_telegram_failure_is_sent_once_by_retry(db, fake, meta, client, n8n_url):
+    respond_with(fake, Response(500, {}))
+    telegram_fails(fake)
+    meta.post(messenger_payload(PAGE_ID, client, "Ile kosztuje montaż?"))
+    eventually(lambda: sent_to_telegram(fake))
+    stays(lambda: not ai_alert_sent(db))
+    db.execute("update messages set ai_failed_at = ai_failed_at - interval '5 minutes'")
+    fake.respond("POST", SEND_MESSAGE_PATH, Response(200, {"ok": True}))
+
+    run_retry(n8n_url)
+    eventually(lambda: ai_alert_sent(db))
+    run_retry(n8n_url)
+
+    stays(lambda: len(sent_to_telegram(fake)) == 2)
+    assert "Ile kosztuje montaż?" in sent_to_telegram(fake)[1]["text"]
 
 
 def test_company_without_telegram_group_gets_no_ai_alert(db, fake, meta, client, company):

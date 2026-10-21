@@ -36,9 +36,9 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Заявка к доставке с Каналом доставки Заказчика. Уже на листе = 0 строк = стоп: повтор не пишет вторую строку.\nselect\n  l.id as lead_id, l.company_id, l.conversation_id, c.channel, l.status,\n  l.name, l.contact, l.service, l.description, l.desired_date, l.intent, l.created_at,\n  to_char(now() at time zone 'Europe/Warsaw', 'YYYY-MM-DD HH24:MI') as delivered_on,\n  co.sheets_spreadsheet_id, co.sheets_sheet_name, co.crm_webhook_url\nfrom leads l\njoin conversations c on c.id = l.conversation_id and c.company_id = l.company_id\njoin companies co on co.id = l.company_id\nwhere l.id = $1::uuid and l.sheets_delivered_at is null",
+        "query": "-- Заявка к доставке с Каналом доставки Заказчика. Уже на листе = 0 строк = стоп: повтор не пишет вторую строку.\nselect\n  l.id as lead_id, l.company_id, l.conversation_id, c.channel, l.status,\n  l.name, l.contact, l.service, l.description, l.desired_date, l.intent, l.created_at,\n  to_char(now() at time zone $2, 'YYYY-MM-DD HH24:MI') as delivered_on,\n  co.sheets_spreadsheet_id, co.sheets_sheet_name, co.crm_webhook_url\nfrom leads l\njoin conversations c on c.id = l.conversation_id and c.company_id = l.company_id\njoin companies co on co.id = l.company_id\nwhere l.id = $1::uuid and l.sheets_delivered_at is null",
         "options": {
-          "queryReplacement": "={{ [$json.lead_id] }}"
+          "queryReplacement": "={{ [$json.lead_id, $env.GENERIC_TIMEZONE || 'Europe/Warsaw'] }}"
         }
       },
       "credentials": {
