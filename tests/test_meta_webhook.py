@@ -110,11 +110,13 @@ def test_next_message_continues_same_conversation(db, meta, client, company):
     assert (conversations, leads) == (1, 1)
 
 
-def test_message_for_unknown_page_is_ignored(db, meta, client, company):
+def test_message_for_unknown_page_is_ignored(db, fake, meta, client, company):
     response = meta.post(messenger_payload("unknown-page", client, "Halo?"))
 
     assert response.status_code == 200
     stays(lambda: message_count(db) == 0)
+    assert fake.requests("/openrouter") == []
+    assert fake.requests("/meta") == []
 
 
 def test_page_echo_is_not_saved_as_client_message(db, meta, client, company):

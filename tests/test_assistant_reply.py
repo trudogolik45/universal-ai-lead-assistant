@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import pytest
@@ -261,3 +262,35 @@ def test_instruction_in_client_text_stays_data_and_prices_come_from_knowledge(db
     assert '"price":120' in system["content"]
     assert text not in system["content"]
     assert rest == [{"role": "user", "content": text}]
+
+
+def client_row_counts(db, company, sender_id):
+    return db.execute(
+        "select"
+        " (select count(*) from conversations where company_id = %(c)s and sender_id = %(s)s),"
+        " (select count(*) from messages m join conversations v on v.id = m.conversation_id"
+        "   where v.company_id = %(c)s and v.sender_id = %(s)s),"
+        " (select count(*) from leads l join conversations v on v.id = l.conversation_id"
+        "   where v.company_id = %(c)s and v.sender_id = %(s)s)",
+        {"c": company, "s": sender_id},
+    ).fetchone()
+
+
+def test_deleted_client_returns_as_stranger_without_old_history(db, fake, meta, client, company):
+    respond_with(
+        fake,
+        assistant_reply(reply="Dzień dobry, Anno!", lead_data={"name": "Anna Kowalska"}),
+        assistant_reply(reply="Dzień dobry!"),
+    )
+    meta.post(messenger_payload(PAGE_ID, client, "Jestem Anna Kowalska"))
+    eventually(lambda: sent_messages(fake))
+
+    db.execute("select delete_client(%s, 'messenger', %s)", (company, client))
+
+    assert client_row_counts(db, company, client) == (0, 0, 0)
+    meta.post(messenger_payload(PAGE_ID, client, "Ile kosztuje montaż?"))
+    eventually(lambda: len(sent_messages(fake)) == 2)
+    second_prompt = json.dumps(completion_requests(fake)[1], ensure_ascii=False)
+    assert "Anna Kowalska" not in second_prompt
+    assert lead(db)[1] is None
+    assert incoming_texts(db) == ["Ile kosztuje montaż?"]

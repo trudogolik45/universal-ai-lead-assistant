@@ -27,7 +27,9 @@ services:
       GENERIC_TIMEZONE: Europe/Warsaw
       # Ключ фиксирован: стенд одноразовый, credentials тестовые.
       N8N_ENCRYPTION_KEY: test-stand-encryption-key
-      # Секреты: тестовые значения. Credentials Postgres импортирует tests/stand.py.
+      # Из него scripts/n8n_sync.py собирает credentials Postgres, как из .env в проде.
+      DATABASE_URL: postgresql://test:test@postgres:5432/test?sslmode=disable
+      # Секреты: тестовые значения.
       META_APP_SECRET: test-app-secret
       META_VERIFY_TOKEN: test-verify-token
       META_PAGE_ACCESS_TOKEN: test-page-token
@@ -50,8 +52,6 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:${STAND_N8N_PORT:-0}:5678"
-    volumes:
-      - ./n8n/workflows:/workflows:ro
     depends_on:
       postgres:
         condition: service_healthy

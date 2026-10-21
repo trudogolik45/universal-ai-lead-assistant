@@ -1,8 +1,8 @@
 """Тестовый стенд: docker-compose.test.yml (Postgres + n8n), импорт workflow и credentials.
 
 Порядок: Postgres → миграции (фикстура `database_url`) → n8n с базовыми URL фейк-сервера →
-credentials (scripts/n8n_credentials.py) → импорт и публикация всех n8n/workflows/*.json → перезапуск n8n
-(вебхуки опубликованных workflow регистрируются при старте).
+scripts.n8n_sync.push, как в проде: credentials, импорт и публикация всех n8n/workflows/*.json,
+перезапуск n8n (вебхуки опубликованных workflow регистрируются при старте).
 """
 
 import hashlib
@@ -15,15 +15,13 @@ from pathlib import Path
 
 import httpx
 
-from scripts.n8n_credentials import credentials
+from scripts.n8n_sync import WORKFLOWS_DIR, push
 
 ROOT = Path(__file__).resolve().parent.parent
 COMPOSE_FILE = ROOT / "docker-compose.test.yml"
-WORKFLOWS_DIR = ROOT / "n8n" / "workflows"
 
-# Учётка Postgres из docker-compose.test.yml. Изнутри сети compose он — хост `postgres`.
+# Учётка Postgres из docker-compose.test.yml.
 PG_AUTH = "test:test"
-N8N_DATABASE_URL = f"postgresql://{PG_AUTH}@postgres:5432/test?sslmode=disable"
 # Метод пробы регистрации вебхуков: в workflow его не используем.
 PROBE_METHOD = "PUT"
 
@@ -69,9 +67,7 @@ class Stand:
         self.env.update(env)
         self.compose("up", "-d", "--force-recreate", "n8n")
         wait_ready(self.n8n_url())
-        self.import_credentials()
-        self.import_workflows()
-        self.compose("restart", "n8n")
+        push(self)
         url = self.n8n_url()
         wait_ready(url)
         wait_webhooks(url)
@@ -81,20 +77,12 @@ class Stand:
         # Спрашивать после каждого (пере)запуска: случайный порт хоста меняется.
         return f"http://{self.host_url('n8n', 5678)}"
 
-    def n8n_cli(self, command: str, input: str | None = None) -> str:
+    def run(self, command: str, input: str | None = None) -> str:
+        """CLI в контейнере n8n стенда (интерфейс scripts.n8n_sync.N8n)."""
         return self.compose("exec", "-T", "n8n", "sh", "-c", command, input=input)
 
-    def import_credentials(self):
-        self.n8n_cli(
-            "cat > /tmp/credentials.json && n8n import:credentials --input=/tmp/credentials.json",
-            input=json.dumps(credentials(N8N_DATABASE_URL)),
-        )
-
-    def import_workflows(self):
-        self.n8n_cli("n8n import:workflow --separate --input=/workflows")
-        for path in sorted(WORKFLOWS_DIR.glob("*.json")):
-            workflow_id = json.loads(path.read_text())["id"]
-            self.n8n_cli(f"n8n publish:workflow --id={workflow_id}")
+    def restart(self) -> None:
+        self.compose("restart", "n8n")
 
     def down(self):
         self.compose("down", "-v", "--remove-orphans")
