@@ -17,6 +17,8 @@ services:
       N8N_PROXY_HOPS: "1"
       WEBHOOK_URL: https://${N8N_DOMAIN}/
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # Code-нода проверки подписи Meta (HMAC) требует модуль crypto.
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
     ports:
       - "127.0.0.1:5678:5678"
     volumes:

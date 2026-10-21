@@ -40,3 +40,35 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
 
 После правки `.env` на VPS — `make deploy` (n8n перечитает переменные при пересоздании).
 Версии образов: `N8N_VERSION`, `CADDY_VERSION` в `.env`, по умолчанию из `deploy/docker-compose.yml`.
+
+## Тесты
+
+Нужны `uv` и Docker. Одна команда:
+
+```
+uv run pytest
+```
+
+Фикстуры (`tests/conftest.py`, `tests/stand.py`) сами поднимают стенд `docker-compose.test.yml`
+(Postgres вместо Supabase и n8n той же версии, что в проде), применяют миграции, импортируют
+credentials и все `n8n/workflows/*.json`, публикуют их и после прогона удаляют контейнеры.
+Внешние API (OpenRouter, Meta Graph, Telegram, Google Sheets, CRM) изображает фейк-сервер
+`tests/fake_server.py` на хосте, n8n ходит в него через `host.docker.internal`.
+Без Docker тесты пропускаются.
+
+- `STAND_KEEP=1 uv run pytest` — оставить стенд после прогона (логи: `docker compose -p <проект>
+  -f docker-compose.test.yml logs n8n`, порт n8n: `... port n8n 5678`).
+- Имя compose-проекта — `COMPOSE_PROJECT_NAME`, по умолчанию своё на каждый checkout;
+  порты хоста случайные, поэтому параллельные стенды не пересекаются.
+
+### Workflow n8n
+
+Workflow лежат в `n8n/workflows/` без секретов, credentials ссылаются на фиксированные id из
+`scripts/n8n_credentials.py`. Править удобно в UI стенда (`STAND_KEEP=1`, владельца создать при
+первом входе), затем выгрузить и перенести в файл только `nodes` и `connections`:
+
+```
+docker compose -p <проект> -f docker-compose.test.yml exec n8n \
+  n8n export:workflow --id=<id> --pretty --output=/tmp/wf.json
+docker compose -p <проект> -f docker-compose.test.yml exec n8n cat /tmp/wf.json
+```
