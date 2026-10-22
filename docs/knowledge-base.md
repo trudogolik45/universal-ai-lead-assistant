@@ -112,7 +112,8 @@ update companies set reply_mode = 'silent' where slug = 'uniwersalny-serwis';
 
 ## Язык по умолчанию (`companies.default_language`)
 
-`pl`, `en` или `ru`. Ассистент отвечает на языке Клиента; язык по умолчанию — когда язык
+Код ISO 639-1 одного из языков Европы (`pl`, `en`, `de`, `uk` и т. д., список — миграция
+`0006_european_languages.sql`). Ассистент отвечает на языке Клиента; язык по умолчанию — когда язык
 Клиента не определить.
 
 ```sql

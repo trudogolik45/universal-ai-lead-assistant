@@ -73,10 +73,10 @@ def test_lead_cannot_join_other_companys_conversation(db):
     "table, column, bad_value",
     [
         ("companies", "reply_mode", "loud"),
-        ("companies", "default_language", "de"),
+        ("companies", "default_language", "xx"),
         ("conversations", "status", "archived"),
         ("conversations", "channel", "email"),
-        ("conversations", "language", "de"),
+        ("conversations", "language", "xx"),
         ("messages", "direction", "sideways"),
         ("leads", "status", "won"),
         ("leads", "intent", "spam"),
@@ -90,6 +90,17 @@ def test_unknown_enum_value_is_rejected(db, table, column, bad_value):
 
     with pytest.raises(psycopg.errors.CheckViolation):
         db.execute(f"update {table} set {column} = %s", (bad_value,))
+
+
+@pytest.mark.parametrize("language", ["de", "uk", "fr", "cs"])
+def test_european_language_is_accepted_for_company_and_conversation(db, language):
+    company = create_company(db)
+    conversation = open_conversation(db, company)
+
+    db.execute("update companies set default_language = %s", (language,))
+    db.execute("update conversations set language = %s", (language,))
+
+    assert db.execute("select language from conversations").fetchone()[0] == language
 
 
 def test_knowledge_item_kind_is_restricted(db):

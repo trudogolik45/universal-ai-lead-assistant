@@ -11,7 +11,7 @@ LEAD_FIELDS = ("name", "contact", "service", "description", "desired_date")
 
 def assistant_reply(
     reply: str = "Dzień dobry!",
-    language: str = "pl",
+    language: str | None = "pl",
     intent: str = "other",
     lead_data: dict | None = None,
     missing_fields: list[str] | None = None,
