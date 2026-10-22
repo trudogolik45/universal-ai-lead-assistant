@@ -40,6 +40,9 @@ SECRET_ENV = (
     "TELEGRAM_WEBHOOK_SECRET",
     "RETRY_WEBHOOK_SECRET",
     "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY",
+    "ESPOCRM_DB_PASSWORD",
+    "ESPOCRM_ADMIN_PASSWORD",
+    "ESPOCRM_API_KEY",
 )
 
 # Короче — не ищем: короткая строка («test») встречается в любом JSON и даёт ложную тревогу.

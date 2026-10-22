@@ -1,5 +1,5 @@
-# Traefik (k3s) держит публичные 80/443 на VPS. Для n8n.n3spark.io он не
-# терминирует TLS, а пропускает поток на Caddy (хост, порт 8443).
+# Traefik (k3s) держит публичные 80/443 на VPS. Для n8n.n3spark.io и crm.n3spark.io
+# он не терминирует TLS, а пропускает поток на Caddy (хост, порт 8443).
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -47,6 +47,10 @@ spec:
     - websecure
   routes:
     - match: HostSNI(`n8n.n3spark.io`)
+      services:
+        - name: caddy
+          port: 8443
+    - match: HostSNI(`crm.n3spark.io`)
       services:
         - name: caddy
           port: 8443

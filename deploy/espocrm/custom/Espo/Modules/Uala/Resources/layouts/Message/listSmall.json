@@ -1,0 +1,12 @@
+[
+    {
+        "name": "text",
+        "link": true
+    },
+    {
+        "name": "author"
+    },
+    {
+        "name": "createdAt"
+    }
+]
