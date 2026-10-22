@@ -10,12 +10,16 @@ import os
 from urllib.parse import parse_qs, unquote, urlsplit
 
 POSTGRES_CREDENTIAL_ID = "uala0postgres001"
+# Как в libpq: только verify-* проверяют сертификат. Supabase pooler подписан своим CA.
+# n8n включает TLS при allowUnauthorizedCerts даже с ssl=disable, поэтому для disable — False.
+VERIFYING_SSLMODES = {"verify-ca", "verify-full"}
 
 
 def postgres_credential(database_url: str) -> dict:
     url = urlsplit(database_url)
     # Supabase требует TLS; локальный Postgres стенда — ?sslmode=disable в URL.
-    ssl = parse_qs(url.query).get("sslmode", ["require"])[0]
+    sslmode = parse_qs(url.query).get("sslmode", ["require"])[0]
+    verify = sslmode in VERIFYING_SSLMODES
     return {
         "id": POSTGRES_CREDENTIAL_ID,
         "name": "Supabase",
@@ -26,8 +30,8 @@ def postgres_credential(database_url: str) -> dict:
             "database": url.path.lstrip("/"),
             "user": unquote(url.username or ""),
             "password": unquote(url.password or ""),
-            "ssl": ssl,
-            "allowUnauthorizedCerts": False,
+            "ssl": "require" if verify else sslmode,
+            "allowUnauthorizedCerts": not verify and sslmode != "disable",
         },
     }
 
