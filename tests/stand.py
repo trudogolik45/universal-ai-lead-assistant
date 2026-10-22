@@ -100,10 +100,15 @@ def wait_until(probe, what: str, timeout: float = 90):
     raise TimeoutError(f"не дождались за {timeout} с: {what}")
 
 
+# Старт n8n под нагрузкой (параллельные стенды, load ~20) доходил до 4+ минут.
+N8N_START_TIMEOUT = 600
+
+
 def wait_ready(url: str):
     wait_until(
         lambda: httpx.get(f"{url}/healthz/readiness", timeout=2).status_code == 200,
         f"n8n {url}",
+        timeout=N8N_START_TIMEOUT,
     )
 
 

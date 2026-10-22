@@ -1,0 +1,271 @@
+{
+  "id": "uala0processInbx",
+  "name": "Process inbox message",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "e3c1a7d2-4b8f-4e19-9c6a-000000000101",
+      "name": "Buffered message",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "inbox_id",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e3c1a7d2-4b8f-4e19-9c6a-000000000102",
+      "name": "Load buffered message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Уже обработанное (параллельный retry) не трогаем: строки нет — поток останавливается.\nselect id as inbox_id, message from inbox where id = $1::uuid and processed_at is null",
+        "options": {
+          "queryReplacement": "={{ [$json.inbox_id] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "e3c1a7d2-4b8f-4e19-9c6a-000000000103",
+      "name": "Handle message",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0handleMsg00",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "={{ $json.message.channel }}",
+            "account_id": "={{ $json.message.account_id }}",
+            "sender_id": "={{ $json.message.sender_id }}",
+            "provider_message_id": "={{ $json.message.provider_message_id }}",
+            "text": "={{ $json.message.text }}"
+          },
+          "matchingColumns": [
+            "channel",
+            "account_id",
+            "sender_id",
+            "provider_message_id",
+            "text"
+          ],
+          "schema": [
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "account_id",
+              "displayName": "account_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sender_id",
+              "displayName": "sender_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "provider_message_id",
+              "displayName": "provider_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "e3c1a7d2-4b8f-4e19-9c6a-000000000106",
+      "name": "Handled without error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('Handle message').all(1).length === 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e3c1a7d2-4b8f-4e19-9c6a-000000000104",
+      "name": "Mark processed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update inbox set processed_at = now() where id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [$('Load buffered message').first().json.inbox_id] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "e3c1a7d2-4b8f-4e19-9c6a-000000000105",
+      "name": "Processing failed (retry later)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        660,
+        400
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Buffered message": {
+      "main": [
+        [
+          {
+            "node": "Load buffered message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load buffered message": {
+      "main": [
+        [
+          {
+            "node": "Handle message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle message": {
+      "main": [
+        [
+          {
+            "node": "Handled without error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Processing failed (retry later)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handled without error": {
+      "main": [
+        [
+          {
+            "node": "Mark processed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  }
+}

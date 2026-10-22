@@ -1,6 +1,6 @@
 {
   "id": "uala0retryLeads0",
-  "name": "Retry leads and close silent conversations",
+  "name": "Retry inbox and leads, close silent conversations",
   "active": false,
   "settings": {
     "executionOrder": "v1",
@@ -350,6 +350,72 @@
           "waitForSubWorkflow": true
         }
       }
+    },
+    {
+      "id": "d1e2f3a4-0000-4000-8000-000000000901",
+      "name": "Claim stale inbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        900
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Буфер: обработка не дошла до конца (сбой, рестарт n8n). Взятые меньше 5 минут назад\n-- ещё в работе у основного потока или прошлого retry: вызов AI с повторами идёт до двух минут.\nupdate inbox set claimed_at = now()\nwhere processed_at is null and claimed_at < now() - interval '5 minutes'\nreturning id as inbox_id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "d1e2f3a4-0000-4000-8000-000000000902",
+      "name": "Process message",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        900
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0processInbx",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "inbox_id": "={{ $json.inbox_id }}"
+          },
+          "matchingColumns": [
+            "inbox_id"
+          ],
+          "schema": [
+            {
+              "id": "inbox_id",
+              "displayName": "inbox_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -421,6 +487,11 @@
             "node": "Find missed AI alerts",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Claim stale inbox",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -457,6 +528,17 @@
         [
           {
             "node": "Alert AI failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim stale inbox": {
+      "main": [
+        [
+          {
+            "node": "Process message",
             "type": "main",
             "index": 0
           }
