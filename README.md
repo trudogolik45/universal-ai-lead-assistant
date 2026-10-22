@@ -29,6 +29,11 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 | `telegram-callback` | `POST /webhook/telegram` | Кнопки «Вернуть ассистенту» и «Закрыть»; возврат с полной Заявкой доставляет и объявляет её |
 | `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Дозапись недоставленных Заявок и алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
 
+Рядом работает EspoCRM на своём Postgres (`deploy/espocrm`, ADR 0001 и 0002). В её модуле Uala
+есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`) и Автомобиль (`Vehicle`).
+У Клиента (`Contact`) есть поле Согласие на рекламу (`marketingConsent`). n8n ходит в EspoCRM по
+REST API под API-пользователем `n8n`.
+
 Секреты — только в `.env` на VPS и в credentials n8n; в репо их нет. Имена и назначение всех
 переменных — `.env.example`.
 
@@ -51,6 +56,11 @@ credentials и все workflow той же командой, что и прод 
   -f docker-compose.test.yml logs n8n`, порт n8n: `... port n8n 5678`).
 - Имя compose-проекта — `COMPOSE_PROJECT_NAME`, по умолчанию своё на каждый checkout;
   порты хоста случайные, поэтому параллельные стенды не пересекаются.
+- Настоящая EspoCRM (`tests/test_espocrm.py`, фикстура `espocrm`): образ из `deploy/espocrm`,
+  отдельная база `espocrm` в Postgres стенда, установка с нуля на каждый прогон (около полутора
+  минут), API-пользователь `n8n` — тем же `scripts/espocrm_bootstrap.py`, что в проде. Админка
+  стенда — `docker compose -p <проект> -f docker-compose.test.yml port espocrm 80`, вход
+  `admin` / `test-espocrm-admin`.
 - Настоящая Google-таблица (`tests/test_lead_delivery_google.py`): задать
   `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` и
   `GOOGLE_SHEETS_TEST_SPREADSHEET_ID` (таблица расшарена на service account как Editor). Тест
@@ -61,21 +71,25 @@ credentials и все workflow той же командой, что и прод 
 
 ## Деплой
 
-n8n работает на VPS `n3-vps` в Docker за Caddy: `https://n8n.n3spark.io`.
+n8n и EspoCRM работают на VPS `n3-vps` в Docker за Caddy: `https://n8n.n3spark.io` и
+`https://crm.n3spark.io`.
 
 ```
-интернет :443 → traefik (k3s, TLS passthrough по SNI) → Caddy :8443 (TLS, Let's Encrypt) → n8n 127.0.0.1:5678
+интернет :443 → traefik (k3s, TLS passthrough по SNI) → Caddy :8443 (TLS, Let's Encrypt)
+  → n8n 127.0.0.1:5678
+  → EspoCRM 127.0.0.1:8080, её WebSocket /ws → 127.0.0.1:8081
 ```
 
 Публичные 80/443 на VPS держит traefik из k3s, он обслуживает остальные `*.n3spark.io`.
-Для `n8n.n3spark.io` он не расшифровывает TLS, а передаёт поток Caddy
-(`deploy/traefik-passthrough.yaml`). Caddy получает сертификат через TLS-ALPN-01.
-HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закрыт ufw, n8n слушает только loopback.
+Для `n8n.n3spark.io` и `crm.n3spark.io` он не расшифровывает TLS, а передаёт поток Caddy
+(`deploy/traefik-passthrough.yaml`). Caddy получает сертификаты через TLS-ALPN-01.
+HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закрыт ufw, n8n и EspoCRM слушают только loopback.
 
 Что нужно на ноутбуке: ssh-хост `n3-vps` в `~/.ssh/config`, `rsync`, `uv`, Docker (для `make check`).
 
-1. Однократно создать `.env` на VPS (`~/uala/.env`) из `.env.example` со сгенерированным
-   `N8N_ENCRYPTION_KEY`. Существующий файл команда не перезапишет:
+1. Создать `.env` на VPS (`~/uala/.env`) из `.env.example` и сгенерировать
+   `N8N_ENCRYPTION_KEY`, `ESPOCRM_DB_PASSWORD`, `ESPOCRM_ADMIN_PASSWORD`. Команда дописывает
+   только недостающие ключи, заданные значения не трогает, так что её можно повторять:
    ```
    make env-init
    ```
@@ -85,8 +99,9 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
    ```
    make deploy
    ```
-   Команда валидирует конфиги (`make check`), копирует `deploy/` на VPS, применяет
-   маршрут traefik и делает `docker compose pull && up -d`. `.env` на VPS не трогает.
+   Команда валидирует конфиги (`make check`), копирует `deploy/` на VPS и применяет маршрут
+   traefik. Потом она собирает образ EspoCRM и делает `docker compose up -d --wait`, а затем
+   `bin/command rebuild` в EspoCRM. `.env` на VPS не трогает.
 4. Открыть `https://n8n.n3spark.io` и при первом входе создать владельца n8n.
 5. Схема и демо-профили в Supabase (идемпотентно, повтор безопасен):
    ```
@@ -94,7 +109,14 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
    DATABASE_URL=... DEMO_MESSENGER_PAGE_ID=... TELEGRAM_CHAT_ID=... GOOGLE_SHEETS_SPREADSHEET_ID=... \
      uv run python -m scripts.seed
    ```
-6. Залить workflow:
+6. API-пользователь n8n в EspoCRM (повтор безопасен, ключ тот же):
+   ```
+   make espocrm-api-user
+   ```
+   Скрипт `scripts/espocrm_bootstrap.py` работает на VPS в контейнере uv. Под admin он создаёт
+   роль и API-пользователя `n8n`, пишет его ключ в `ESPOCRM_API_KEY` в `~/uala/.env` и
+   пересоздаёт n8n. Ключ не покидает VPS.
+7. Залить workflow:
    ```
    make workflows
    ```
@@ -102,10 +124,45 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
    (передаются через stdin, на диск ноутбука не пишутся), импорт всех `n8n/workflows/*.json`,
    `publish:workflow` каждого и перезапуск n8n — вебхуки регистрируются только при старте.
    Повторять после каждой правки workflow.
-7. Вебхуки внешних сервисов — см. ниже: Meta и Telegram.
+8. Вебхуки внешних сервисов — см. ниже: Meta и Telegram.
 
 После правки `.env` на VPS — `make deploy` (n8n перечитает переменные при пересоздании).
-Версии образов: `N8N_VERSION`, `CADDY_VERSION` в `.env`, по умолчанию из `deploy/docker-compose.yml`.
+Версии образов: `N8N_VERSION`, `CADDY_VERSION`, `ESPOCRM_VERSION`, `POSTGRES_VERSION` в `.env`,
+по умолчанию из `deploy/docker-compose.yml`.
+
+### EspoCRM
+
+Вход: `https://crm.n3spark.io`, пользователь `admin`, пароль — `ESPOCRM_ADMIN_PASSWORD` из
+`~/uala/.env`. Этот пароль и `ESPOCRM_DB_PASSWORD` действуют только при первой установке.
+Дальше пароль admin меняют в самой EspoCRM, а пароль базы хранится в томе Postgres.
+
+Свои сущности и поля лежат в модуле `deploy/espocrm/custom/Espo/Modules/Uala`. Он входит в образ,
+кликать в админке ничего не нужно:
+
+- `Resources/metadata/entityDefs/<Сущность>.json` — поля, связи, индексы; `Contact.json`
+  только дополняет встроенного Клиента;
+- `scopes/`, `clientDefs/`, `Controllers/` — регистрация своей сущности и её REST API;
+- `Resources/layouts/` — раскладки экранов, `Resources/i18n/pl_PL` и `en_US` — подписи.
+
+Как обновить:
+
+- Сущности или поля: правка модуля → `make deploy`. Образ пересобирается, `rebuild` добавляет
+  таблицы и колонки. Удалённые поля остаются в базе колонками, EspoCRM их не удаляет.
+  Новой сущности, с которой работает n8n, нужно право в `ROLE_ACL`
+  (`scripts/espocrm_bootstrap.py`) и повтор `make espocrm-api-user`.
+- Версия EspoCRM: `ESPOCRM_VERSION` в `.env` (тег `espocrm/espocrm:<версия>-apache`) →
+  `make deploy`. При старте entrypoint сам делает `migrate`. Сначала прогнать тесты с новой
+  версией: `docker-compose.test.yml` собирает образ с версией по умолчанию из `deploy/espocrm/Dockerfile`.
+- Правки из админки (Entity Manager, Layout Manager) хранятся в томе `espocrm_custom`
+  (`custom/Espo/Custom`) и переживают пересборку. Их раскладки перекрывают раскладки модуля.
+  То, что нужно воспроизводимо, переносить в модуль.
+
+Валюта по умолчанию — USD: `ESPOCRM_DEFAULT_CURRENCY=PLN` без PLN в `currencyList` ломает
+`rebuild` (деление на ноль в курсах). PLN включают в админке: Administration → Currency.
+
+WebSocket включён (`ESPOCRM_CONFIG_USE_WEB_SOCKET`). Сервер — контейнер `espocrm-websocket`,
+браузер ходит на `wss://crm.n3spark.io/ws`. Cron EspoCRM (уведомления, письма) работает в
+`espocrm-daemon`.
 
 ### Meta
 

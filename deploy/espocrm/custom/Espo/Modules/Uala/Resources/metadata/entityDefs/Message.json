@@ -1,0 +1,85 @@
+{
+    "fields": {
+        "name": {
+            "type": "varchar",
+            "pattern": "$noBadCharacters"
+        },
+        "conversation": {
+            "type": "link",
+            "required": true
+        },
+        "direction": {
+            "type": "enum",
+            "required": true,
+            "options": ["in", "out"],
+            "default": "in"
+        },
+        "author": {
+            "type": "enum",
+            "required": true,
+            "options": ["client", "assistant", "employee"],
+            "default": "client"
+        },
+        "text": {
+            "type": "text",
+            "required": true
+        },
+        "providerMessageId": {
+            "type": "varchar",
+            "maxLength": 255,
+            "readOnlyAfterCreate": true
+        },
+        "createdAt": {
+            "type": "datetime",
+            "readOnly": true
+        },
+        "modifiedAt": {
+            "type": "datetime",
+            "readOnly": true
+        },
+        "createdBy": {
+            "type": "link",
+            "readOnly": true,
+            "view": "views/fields/user"
+        },
+        "modifiedBy": {
+            "type": "link",
+            "readOnly": true,
+            "view": "views/fields/user"
+        }
+    },
+    "links": {
+        "conversation": {
+            "type": "belongsTo",
+            "entity": "Conversation",
+            "foreign": "messages"
+        },
+        "createdBy": {
+            "type": "belongsTo",
+            "entity": "User"
+        },
+        "modifiedBy": {
+            "type": "belongsTo",
+            "entity": "User"
+        }
+    },
+    "collection": {
+        "orderBy": "createdAt",
+        "order": "asc"
+    },
+    "indexes": {
+        "conversation": {
+            "columns": ["conversationId", "createdAt"]
+        },
+        "providerMessageId": {
+            "columns": ["providerMessageId"]
+        },
+        "createdAt": {
+            "columns": ["createdAt"]
+        },
+        "createdAtId": {
+            "unique": true,
+            "columns": ["createdAt", "id"]
+        }
+    }
+}

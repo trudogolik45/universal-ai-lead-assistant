@@ -1,0 +1,25 @@
+[
+    {
+        "label": "",
+        "rows": [
+            [
+                {
+                    "name": "name"
+                }
+            ],
+            [
+                {
+                    "name": "brand"
+                },
+                {
+                    "name": "model"
+                }
+            ],
+            [
+                {
+                    "name": "licensePlate"
+                }
+            ]
+        ]
+    }
+]

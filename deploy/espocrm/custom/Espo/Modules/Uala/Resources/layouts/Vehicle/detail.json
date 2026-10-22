@@ -1,0 +1,43 @@
+[
+    {
+        "label": "",
+        "rows": [
+            [
+                {
+                    "name": "name"
+                },
+                {
+                    "name": "contact"
+                }
+            ],
+            [
+                {
+                    "name": "brand"
+                },
+                {
+                    "name": "model"
+                }
+            ],
+            [
+                {
+                    "name": "year"
+                },
+                {
+                    "name": "licensePlate"
+                }
+            ],
+            [
+                {
+                    "name": "vin"
+                },
+                false
+            ],
+            [
+                {
+                    "name": "description",
+                    "fullWidth": true
+                }
+            ]
+        ]
+    }
+]

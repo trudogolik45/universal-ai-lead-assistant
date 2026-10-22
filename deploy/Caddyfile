@@ -8,11 +8,27 @@
 	}
 }
 
-{$N8N_DOMAIN} {
+# Сертификат через TLS-ALPN-01: HTTP-проверку traefik сюда не пропускает.
+(acme_tls_alpn) {
 	tls {
 		issuer acme {
 			disable_http_challenge
 		}
 	}
+}
+
+{$N8N_DOMAIN} {
+	import acme_tls_alpn
 	reverse_proxy 127.0.0.1:5678
+}
+
+{$ESPOCRM_DOMAIN} {
+	import acme_tls_alpn
+	# WebSocket EspoCRM (живое обновление экрана) — отдельный контейнер.
+	handle /ws* {
+		reverse_proxy 127.0.0.1:8081
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8080
+	}
 }

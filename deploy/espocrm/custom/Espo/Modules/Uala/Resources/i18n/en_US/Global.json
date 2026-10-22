@@ -1,0 +1,12 @@
+{
+    "scopeNames": {
+        "Conversation": "Conversation",
+        "Message": "Message",
+        "Vehicle": "Vehicle"
+    },
+    "scopeNamesPlural": {
+        "Conversation": "Conversations",
+        "Message": "Messages",
+        "Vehicle": "Vehicles"
+    }
+}

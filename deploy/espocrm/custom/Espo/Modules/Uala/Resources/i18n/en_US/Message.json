@@ -1,0 +1,26 @@
+{
+    "fields": {
+        "conversation": "Conversation",
+        "direction": "Direction",
+        "author": "Author",
+        "text": "Text",
+        "providerMessageId": "Channel message ID"
+    },
+    "links": {
+        "conversation": "Conversation"
+    },
+    "options": {
+        "direction": {
+            "in": "Incoming",
+            "out": "Outgoing"
+        },
+        "author": {
+            "client": "Client",
+            "assistant": "Assistant",
+            "employee": "Employee"
+        }
+    },
+    "labels": {
+        "Create Message": "Create Message"
+    }
+}

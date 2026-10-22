@@ -1,0 +1,21 @@
+[
+    {
+        "label": "",
+        "rows": [
+            [
+                {
+                    "name": "direction"
+                },
+                {
+                    "name": "author"
+                }
+            ],
+            [
+                {
+                    "name": "text",
+                    "fullWidth": true
+                }
+            ]
+        ]
+    }
+]

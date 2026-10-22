@@ -1,8 +1,17 @@
-# Прод-стек на VPS n3-vps: n8n за Caddy.
-# Публичные 80/443 держит traefik из k3s. Для n8n.n3spark.io он пропускает TLS
-# насквозь (traefik-passthrough.yaml) на Caddy :8443. Caddy сам получает
-# сертификат (TLS-ALPN-01) и проксирует на n8n.
+# Прод-стек на VPS n3-vps: n8n и EspoCRM за Caddy.
+# Публичные 80/443 держит traefik из k3s. Для n8n.n3spark.io и crm.n3spark.io он пропускает
+# TLS насквозь (traefik-passthrough.yaml) на Caddy :8443. Caddy сам получает
+# сертификаты (TLS-ALPN-01) и проксирует на n8n и EspoCRM.
 name: uala
+
+# Образ EspoCRM с модулем Uala собирается на VPS из deploy/espocrm (make deploy).
+x-espocrm: &espocrm
+  build:
+    context: espocrm
+    args:
+      ESPOCRM_VERSION: ${ESPOCRM_VERSION:-10.0.10}
+  image: uala-espocrm:${ESPOCRM_VERSION:-10.0.10}
+  restart: unless-stopped
 
 services:
   n8n:
@@ -24,6 +33,79 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
 
+  # Один Postgres на сервер, у каждого приложения своя база. Пока в нём только EspoCRM.
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-17-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: espocrm
+      POSTGRES_PASSWORD: ${ESPOCRM_DB_PASSWORD:?ESPOCRM_DB_PASSWORD не задан}
+      POSTGRES_DB: espocrm
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "espocrm"]
+      interval: 5s
+      retries: 30
+
+  # Установка при первом старте берёт ESPOCRM_DATABASE_* и ESPOCRM_ADMIN_* (дальше они не
+  # меняются), ESPOCRM_CONFIG_* применяются на каждом старте.
+  espocrm:
+    <<: *espocrm
+    environment:
+      ESPOCRM_DATABASE_PLATFORM: Postgresql
+      ESPOCRM_DATABASE_HOST: postgres
+      ESPOCRM_DATABASE_PORT: "5432"
+      ESPOCRM_DATABASE_NAME: espocrm
+      ESPOCRM_DATABASE_USER: espocrm
+      ESPOCRM_DATABASE_PASSWORD: ${ESPOCRM_DB_PASSWORD}
+      ESPOCRM_ADMIN_USERNAME: admin
+      ESPOCRM_ADMIN_PASSWORD: ${ESPOCRM_ADMIN_PASSWORD:?ESPOCRM_ADMIN_PASSWORD не задан}
+      ESPOCRM_SITE_URL: https://${ESPOCRM_DOMAIN:?ESPOCRM_DOMAIN не задан}
+      ESPOCRM_LANGUAGE: pl_PL
+      ESPOCRM_TIME_ZONE: Europe/Warsaw
+      # Живое обновление экрана: сервер espocrm-websocket, браузер ходит на /ws через Caddy.
+      ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
+      ESPOCRM_CONFIG_WEB_SOCKET_URL: wss://${ESPOCRM_DOMAIN}/ws
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: tcp://*:7777
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: tcp://espocrm-websocket:7777
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - espocrm_data:/var/www/html/data
+      # Правки из админки (Entity Manager, Layout Manager). Модуль Uala — в образе.
+      - espocrm_custom:/var/www/html/custom/Espo/Custom
+    # Apache стартует после установки: до неё app-check уже проходит, а API ещё нет.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/"]
+      interval: 30s
+      start_period: 5m
+      start_interval: 2s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Cron EspoCRM: уведомления, письма, напоминания.
+  espocrm-daemon:
+    <<: *espocrm
+    entrypoint: docker-daemon.sh
+    volumes_from:
+      - espocrm
+    depends_on:
+      espocrm:
+        condition: service_healthy
+
+  espocrm-websocket:
+    <<: *espocrm
+    entrypoint: docker-websocket.sh
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes_from:
+      - espocrm
+    depends_on:
+      espocrm:
+        condition: service_healthy
+
   caddy:
     image: caddy:${CADDY_VERSION:-2.11}
     restart: unless-stopped
@@ -31,14 +113,19 @@ services:
     network_mode: host
     environment:
       N8N_DOMAIN: ${N8N_DOMAIN}
+      ESPOCRM_DOMAIN: ${ESPOCRM_DOMAIN}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - n8n
+      - espocrm
 
 volumes:
   n8n_data:
+  postgres_data:
+  espocrm_data:
+  espocrm_custom:
   caddy_data:
   caddy_config:

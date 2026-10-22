@@ -62,3 +62,4 @@
 опаздывал в следующий тест после сброса фейка. Теперь соединение закрывает n8n (`tests/fake_server.py`,
 `tests/test_fake_server.py`). `test_handoff.py::test_message_after_close_opens_new_conversation_and_lead`
 проверял статус новой Заявки до ответа AI — теперь ждёт его через `eventually`.
+| EspoCRM (второй шов, настоящая EspoCRM в Docker, #19): API-пользователь n8n создаёт и читает Беседу и Сообщения, Автомобиль Клиента, Согласие на рекламу; права без админа; bootstrap идемпотентен; WebSocket включён | `test_espocrm.py` (8) | passed |
