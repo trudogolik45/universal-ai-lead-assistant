@@ -172,6 +172,8 @@ def test_intent_follows_client_when_topic_changes(db, fake, meta, client):
     ("pl", "Ile kosztuje montaż?", "Montaż kosztuje 120 zł za godzinę."),
     ("en", "How much is furniture assembly?", "Assembly costs 120 PLN per hour."),
     ("ru", "Сколько стоит сборка мебели?", "Сборка стоит 120 злотых в час."),
+    ("de", "Was kostet die Möbelmontage?", "Die Montage kostet 120 PLN pro Stunde."),
+    ("uk", "Скільки коштує збирання меблів?", "Збирання коштує 120 злотих на годину."),
 ])
 def test_reply_goes_out_in_client_language(db, fake, meta, client, language, text, reply):
     respond_with(fake, assistant_reply(reply=reply, language=language, intent="price"))
@@ -181,6 +183,30 @@ def test_reply_goes_out_in_client_language(db, fake, meta, client, language, tex
     eventually(lambda: sent_messages(fake))
     assert sent_messages(fake)[0]["message"]["text"] == reply
     assert conversation_language(db) == language
+
+
+def test_assistant_may_answer_in_any_european_language(db, fake, meta, client):
+    respond_with(fake, assistant_reply())
+
+    meta.post(messenger_payload(PAGE_ID, client, "Dobrý den"))
+
+    request = eventually(lambda: completion_requests(fake))[0]
+    language = request["response_format"]["json_schema"]["schema"]["properties"]["language"]
+    assert {"pl", "en", "ru", "de", "uk", "fr", "cs", "lt"} <= set(language["enum"])
+    system = request["messages"][0]["content"]
+    assert "(pl, en or ru)" not in system
+    assert "handoff_reason is a short reason in Polish" in system
+
+
+def test_undetected_language_falls_back_to_company_default(db, fake, meta, client, company):
+    db.execute("update companies set default_language = 'en' where id = %s", (company,))
+    respond_with(fake, assistant_reply(reply="Hello! How can I help?", language=None))
+
+    meta.post(messenger_payload(PAGE_ID, client, "Saluton"))
+
+    eventually(lambda: sent_messages(fake))
+    assert sent_messages(fake)[0]["message"]["text"] == "Hello! How can I help?"
+    assert conversation_language(db) == "en"
 
 
 def test_qualified_from_ai_without_required_field_stays_collecting(db, fake, meta, client):

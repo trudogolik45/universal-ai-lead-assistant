@@ -77,7 +77,7 @@ def test_unknown_question_hands_conversation_off_to_human(db, fake, meta, client
 
 @pytest.mark.parametrize(
     ("language", "expected"),
-    [("pl", "przekaz"), ("en", "pass"), ("ru", "переда")],
+    [("pl", "przekaz"), ("en", "pass"), ("ru", "беседу"), ("de", "weiter"), ("uk", "розмову")],
 )
 def test_client_asking_for_human_gets_handoff_notice_in_own_language(db, fake, meta, client, language, expected):
     respond_with(fake, handoff_reply(reason="Klient prosi o człowieka", language=language))
@@ -87,6 +87,16 @@ def test_client_asking_for_human_gets_handoff_notice_in_own_language(db, fake, m
     text = eventually(lambda: sent_texts(fake))[0]
     assert expected in text.lower()
     assert "50 zł" not in text
+
+
+def test_handoff_notice_for_undetected_language_is_in_company_default_language(db, fake, meta, client, company):
+    db.execute("update companies set default_language = 'en' where id = %s", (company,))
+    respond_with(fake, handoff_reply(reason="Klient prosi o człowieka", language=None))
+
+    meta.post(messenger_payload(PAGE_ID, client, "Mi volas paroli kun homo"))
+
+    text = eventually(lambda: sent_texts(fake))[0]
+    assert "pass" in text.lower()
 
 
 def lead_id(db):
