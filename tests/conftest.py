@@ -38,6 +38,14 @@ def db(database_url):
 
 
 @pytest.fixture(scope="session")
+def espocrm(stand):
+    """Настоящая EspoCRM стенда (tests/espocrm.py): своя база в Postgres стенда, свежая установка
+    на прогон, модуль Uala и API-пользователь n8n, как в проде. Записи между тестами не чистятся:
+    тест создаёт свои."""
+    return stand.up_espocrm()
+
+
+@pytest.fixture(scope="session")
 def fake_server():
     server = FakeServer().start()
     yield server

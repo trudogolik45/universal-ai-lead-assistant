@@ -1,0 +1,25 @@
+[
+    {
+        "label": "",
+        "rows": [
+            [
+                {
+                    "name": "name"
+                }
+            ],
+            [
+                {
+                    "name": "contact"
+                }
+            ],
+            [
+                {
+                    "name": "channel"
+                },
+                {
+                    "name": "senderId"
+                }
+            ]
+        ]
+    }
+]

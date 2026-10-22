@@ -2,6 +2,19 @@
 # Поднимает и импортирует workflow фикстура tests/stand.py, руками — см. README.
 # Порты хоста случайные (0): параллельные стенды не пересекаются, адрес узнаём через `docker compose port`.
 # Имя проекта — COMPOSE_PROJECT_NAME (фикстура задаёт своё на каждый checkout).
+# EspoCRM (образ deploy/espocrm, как в проде) поднимает только фикстура `espocrm`: база `espocrm`
+# в том же Postgres, установка с нуля на каждый прогон. Имя образа не задано: compose называет его
+# по проекту, и стенды разных checkout'ов не перетирают модуль друг другу.
+
+x-espocrm: &espocrm
+  build: deploy/espocrm
+  # Daemon и WebSocket выходят, если основной контейнер ещё не готов.
+  restart: unless-stopped
+  volumes_from:
+    - espocrm
+  depends_on:
+    espocrm:
+      condition: service_healthy
 
 services:
   postgres:
@@ -60,3 +73,46 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  espocrm:
+    build: deploy/espocrm
+    environment:
+      ESPOCRM_DATABASE_PLATFORM: Postgresql
+      ESPOCRM_DATABASE_HOST: postgres
+      ESPOCRM_DATABASE_PORT: "5432"
+      ESPOCRM_DATABASE_NAME: espocrm
+      ESPOCRM_DATABASE_USER: test
+      ESPOCRM_DATABASE_PASSWORD: test
+      ESPOCRM_ADMIN_USERNAME: admin
+      ESPOCRM_ADMIN_PASSWORD: test-espocrm-admin
+      ESPOCRM_SITE_URL: http://localhost
+      ESPOCRM_LANGUAGE: pl_PL
+      ESPOCRM_TIME_ZONE: Europe/Warsaw
+      # WebSocket: сервер в espocrm-websocket, адрес для браузера стенду не нужен.
+      ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: tcp://*:7777
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: tcp://espocrm-websocket:7777
+    volumes:
+      - /var/www/html/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${STAND_ESPOCRM_PORT:-0}:80"
+    # Apache стартует после установки: до неё app-check уже проходит, а API ещё нет.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/"]
+      interval: 2s
+      retries: 150
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  espocrm-daemon:
+    <<: *espocrm
+    entrypoint: docker-daemon.sh
+
+  espocrm-websocket:
+    <<: *espocrm
+    entrypoint: docker-websocket.sh
+    ports:
+      - "127.0.0.1:${STAND_ESPOCRM_WEBSOCKET_PORT:-0}:8080"

@@ -1,0 +1,16 @@
+{
+    "fields": {
+        "brand": "Marka",
+        "model": "Model",
+        "year": "Rok produkcji",
+        "licensePlate": "Numer rejestracyjny",
+        "vin": "VIN",
+        "contact": "Klient"
+    },
+    "links": {
+        "contact": "Klient"
+    },
+    "labels": {
+        "Create Vehicle": "Dodaj pojazd"
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "scopeNames": {
+        "Conversation": "Rozmowa",
+        "Message": "Wiadomość",
+        "Vehicle": "Pojazd"
+    },
+    "scopeNamesPlural": {
+        "Conversation": "Rozmowy",
+        "Message": "Wiadomości",
+        "Vehicle": "Pojazdy"
+    }
+}
