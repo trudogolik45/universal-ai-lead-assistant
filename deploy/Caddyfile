@@ -1,0 +1,18 @@
+{
+	# 80 и 443 на хосте держит traefik (k3s), сюда он отдаёт TLS по SNI.
+	https_port 8443
+	auto_https disable_redirects
+	# HTTP/3 (UDP) traefik не пропускает.
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$N8N_DOMAIN} {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+	reverse_proxy 127.0.0.1:5678
+}
