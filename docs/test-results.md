@@ -6,8 +6,12 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17` (после мержа #27), команда `uv run pytest -rs`.
-- Результат: **185 passed, 1 skipped** за 1060 с.
+- Дата: 2026-10-23, ветка `spec-17-28-booking` (после мержа #27), команда `uv run pytest -rs`.
+- Результат: **197 passed, 2 failed, 1 skipped** за 1405 с (load average ~15). Упали
+  `test_migrate.py::test_every_client_data_table_is_scoped_by_company` (не знал новых таблиц
+  `appointments`, `slot_locks`) и `test_meta_webhook.py::test_message_for_unknown_page_is_ignored`
+  (запрос к AI от хвоста предыдущего теста; теперь тест смотрит только запросы о своём Сообщении).
+  Оба исправлены и перепрогнаны вместе со своими файлами: 12 passed.
 - Skipped: `tests/test_lead_delivery_google.py::test_qualified_lead_row_is_read_back_from_real_spreadsheet` —
   запись в настоящую Google-таблицу и чтение обратно. Нужны `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_SHEETS_TEST_SPREADSHEET_ID`; service account и
