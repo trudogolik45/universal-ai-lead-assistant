@@ -31,7 +31,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Заявку не пишет в CRM другой вызов (свежая попытка моложе 5 минут). Строки нет — уже пишется: стоп;\n-- изменения, пришедшие во время записи, допишет retry. version — updated_at записываемой Заявки.\n-- crm_meeting_id — Запись Заявки: переходник привязывает её к Клиенту и Автомобилю.\nwith claimed as (\n  insert into crm_leads (lead_id, claimed_at)\n  select id, now() from leads where id = nullif($1, '')::uuid\n  on conflict (lead_id) do update set claimed_at = now()\n  where crm_leads.claimed_at is null or crm_leads.claimed_at < now() - interval '5 minutes'\n  returning lead_id, crm_lead_id, crm_vehicle_id\n)\nselect c.lead_id, c.crm_lead_id, c.crm_vehicle_id, l.updated_at::text as version, v.channel, v.sender_id,\n  l.name, l.phone, l.vehicle_brand, l.vehicle_model, l.service, l.description, l.desired_date,\n  (select a.crm_meeting_id from appointments a where a.lead_id = l.id order by a.created_at desc limit 1)\n    as crm_meeting_id\nfrom claimed c\njoin leads l on l.id = c.lead_id\njoin conversations v on v.id = l.conversation_id",
+        "query": "-- Заявку не пишет в CRM другой вызов (свежая попытка моложе 5 минут). Строки нет — уже пишется: стоп;\n-- изменения, пришедшие во время записи, допишет retry. version — updated_at записываемой Заявки.\n-- crm_meeting_id — Запись Заявки: переходник привязывает её к Клиенту и Автомобилю.\n-- marketing_consent — ответ Клиента о Согласии на рекламу в этой Беседе (null — не отвечал).\nwith claimed as (\n  insert into crm_leads (lead_id, claimed_at)\n  select id, now() from leads where id = nullif($1, '')::uuid\n  on conflict (lead_id) do update set claimed_at = now()\n  where crm_leads.claimed_at is null or crm_leads.claimed_at < now() - interval '5 minutes'\n  returning lead_id, crm_lead_id, crm_vehicle_id\n)\nselect c.lead_id, c.crm_lead_id, c.crm_vehicle_id, l.updated_at::text as version, v.channel, v.sender_id,\n  l.name, l.phone, l.vehicle_brand, l.vehicle_model, l.service, l.description, l.desired_date, l.marketing_consent,\n  (select a.crm_meeting_id from appointments a where a.lead_id = l.id order by a.created_at desc limit 1)\n    as crm_meeting_id\nfrom claimed c\njoin leads l on l.id = c.lead_id\njoin conversations v on v.id = l.conversation_id",
         "options": {
           "queryReplacement": "={{ [$json.lead_id] }}"
         }
@@ -71,7 +71,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "operation": "record_lead",
-            "data": "={{ { channel: $json.channel, sender_id: $json.sender_id, crm_lead_id: $json.crm_lead_id, crm_vehicle_id: $json.crm_vehicle_id, name: $json.name, phone: $json.phone, vehicle_brand: $json.vehicle_brand, vehicle_model: $json.vehicle_model, service: $json.service, description: $json.description, desired_date: $json.desired_date, crm_meeting_id: $json.crm_meeting_id } }}"
+            "data": "={{ { channel: $json.channel, sender_id: $json.sender_id, crm_lead_id: $json.crm_lead_id, crm_vehicle_id: $json.crm_vehicle_id, name: $json.name, phone: $json.phone, vehicle_brand: $json.vehicle_brand, vehicle_model: $json.vehicle_model, service: $json.service, description: $json.description, desired_date: $json.desired_date, crm_meeting_id: $json.crm_meeting_id, marketing_consent: $json.marketing_consent } }}"
           },
           "matchingColumns": [
             "operation",

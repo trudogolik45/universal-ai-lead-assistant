@@ -21,9 +21,11 @@ def assistant_reply(
     needs_human: bool = False,
     handoff_reason: str | None = None,
     appointment_start: str | None = None,
+    marketing_consent: bool | None = None,
 ) -> Response:
     """Ответ chat/completions, в content — JSON по схеме Ассистента. Неуказанные поля Заявки — null.
-    appointment_start — слот, в который Ассистент записывает Клиента (местное время «YYYY-MM-DD HH:MM»)."""
+    appointment_start — слот, в который Ассистент записывает Клиента (местное время «YYYY-MM-DD HH:MM»).
+    marketing_consent — ответ Клиента на вопрос о Согласии на рекламу: True, False или None (не отвечал)."""
     content = {
         "reply": reply,
         "language": language,
@@ -34,6 +36,7 @@ def assistant_reply(
         "needs_human": needs_human,
         "handoff_reason": handoff_reason,
         "appointment_start": appointment_start,
+        "marketing_consent": marketing_consent,
     }
     return raw_reply(json.dumps(content))
 
