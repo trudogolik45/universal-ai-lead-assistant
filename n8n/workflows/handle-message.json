@@ -343,31 +343,58 @@
     },
     {
       "id": "b9a1c5b0-0d6b-4a43-9a0e-000000000023",
-      "name": "Send reply (Messenger)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "Send reply",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
       "position": [
         3520,
         100
       ],
       "onError": "continueRegularOutput",
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.META_GRAPH_BASE_URL }}/me/messages",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.META_PAGE_ACCESS_TOKEN }}"
-            }
-          ]
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0sendClient0",
+          "mode": "id"
         },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ recipient: { id: $json.sender_id }, messaging_type: 'RESPONSE', message: { text: $json.reply } }) }}",
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $json.conversation_id }}",
+            "text": "={{ $json.reply }}"
+          },
+          "matchingColumns": [
+            "conversation_id",
+            "text"
+          ],
+          "schema": [
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
         "options": {
-          "timeout": 60000
+          "waitForSubWorkflow": true
         }
       }
     },
@@ -1001,7 +1028,7 @@
       "main": [
         [
           {
-            "node": "Send reply (Messenger)",
+            "node": "Send reply",
             "type": "main",
             "index": 0
           }

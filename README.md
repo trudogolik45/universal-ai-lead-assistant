@@ -1,6 +1,6 @@
 # Universal AI Lead Assistant
 
-AI-ассистент для входящих заявок малого бизнеса в Messenger: отвечает Клиенту по Базе знаний
+AI-ассистент для входящих заявок малого бизнеса в Messenger и WhatsApp: отвечает Клиенту по Базе знаний
 Заказчика, собирает Заявку и доставляет её в Google-таблицу, Telegram и CRM-webhook.
 Спека: issue #1, термины: `GLOSSARY.md`.
 
@@ -13,6 +13,7 @@ AI-ассистент для входящих заявок малого бизн
 | [docs/knowledge-base.md](docs/knowledge-base.md) | Как менять Базу знаний, обязательные поля, Режим ответа, модель AI; удаление данных Клиента |
 | [docs/crm-webhook.md](docs/crm-webhook.md) | Подключение CRM через webhook, формат JSON, когда уходит |
 | [docs/meta-setup.md](docs/meta-setup.md) | Для Заказчика: приложение Meta, страница, вебхук, токены |
+| [docs/whatsapp-setup.md](docs/whatsapp-setup.md) | Для Заказчика: номер WhatsApp, постоянный токен, вебхук, шаблон «есть новости» |
 | [docs/google-setup.md](docs/google-setup.md) | Для Заказчика: service account, JSON-ключ, доступ к таблице |
 | [docs/test-results.md](docs/test-results.md) | Сценарии спеки → тесты → результат последнего прогона |
 
@@ -24,7 +25,8 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 |---|---|---|
 | `meta-webhook` | `POST /webhook/meta` | Подпись Meta → сообщения в буфер входящих (`inbox`, дубль по id сообщения отсекается) → 200 Meta → `process-inbox` |
 | `process-inbox` | вызов из других workflow | Сообщение из буфера через `handle-message`; дошло до конца — помечается обработанным, упало — остаётся в буфере |
-| `handle-message` | вызов из других workflow | Заказчик по странице → Сообщение в Беседу → База знаний из EspoCRM → OpenRouter → ответ Клиенту, Заявка, Передача человеку; входящее и ответ — в CRM через `write-message-to-crm`, Заявка — через `write-lead-to-crm`, Задача человеку — через `create-handoff-task` |
+| `handle-message` | вызов из других workflow | Заказчик по странице или номеру → Сообщение в Беседу → База знаний из EspoCRM → OpenRouter → ответ Клиенту через `send-to-client`, Заявка, Передача человеку; входящее и ответ — в CRM через `write-message-to-crm`, Заявка — через `write-lead-to-crm`, Задача человеку — через `create-handoff-task` |
+| `send-to-client` | вызов из других workflow | Текст Клиенту в Канал его Беседы: Messenger Send API или WhatsApp Cloud API; WhatsApp вне окна 24 часов — шаблон `news_update` |
 | `write-message-to-crm` | вызов из других workflow | Сообщение из Postgres в Беседу Клиента в CRM через переходник; не вышло — остаётся недописанным (`messages.crm_message_id` пуст) для retry |
 | `write-lead-to-crm` | вызов из других workflow | Заявка из Postgres в CRM с Клиентом и Автомобилем через переходник; не вышло или Заявка изменилась во время записи — её дописывает retry (`crm_leads`) |
 | `create-handoff-task` | вызов из других workflow | Передача человеку → Задача человеку в CRM через переходник: сводка на польском, ссылка на Беседу; не вышло — остаётся без задачи (`leads.handoff_task_id` пуст) для retry |
@@ -119,8 +121,8 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
 5. Схема и демо-профили в Supabase (идемпотентно, повтор безопасен):
    ```
    DATABASE_URL=... uv run python -m scripts.migrate
-   DATABASE_URL=... DEMO_MESSENGER_PAGE_ID=... TELEGRAM_CHAT_ID=... GOOGLE_SHEETS_SPREADSHEET_ID=... \
-     uv run python -m scripts.seed
+   DATABASE_URL=... DEMO_MESSENGER_PAGE_ID=... DEMO_WHATSAPP_PHONE_NUMBER_ID=... \
+     TELEGRAM_CHAT_ID=... GOOGLE_SHEETS_SPREADSHEET_ID=... uv run python -m scripts.seed
    ```
 6. API-пользователь n8n в EspoCRM (повтор безопасен, ключ тот же):
    ```
@@ -191,7 +193,15 @@ assignment»), но только с SMTP (Administration → Outbound Emails) и
 ### Meta
 
 URL вебхука `https://n8n.n3spark.io/webhook/meta`, verify token — `META_VERIFY_TOKEN` из `.env`.
-Пошагово для Заказчика — [docs/meta-setup.md](docs/meta-setup.md).
+Messenger и WhatsApp приходят в этот вебхук, подпись одна — `META_APP_SECRET` приложения.
+Заказчика находим по странице (`companies.messenger_page_id`) или номеру
+(`companies.whatsapp_phone_number_id`, сид — `DEMO_WHATSAPP_PHONE_NUMBER_ID`).
+Пошагово для Заказчика — [docs/meta-setup.md](docs/meta-setup.md) и
+[docs/whatsapp-setup.md](docs/whatsapp-setup.md).
+
+WhatsApp отвечает через Cloud API номера (`WHATSAPP_ACCESS_TOKEN`). В течение 24 часов с
+последнего сообщения Клиента ответ уходит свободным текстом. Позже уходит шаблон `news_update`:
+на pl, если Беседа на польском, иначе на en.
 
 ### Telegram
 

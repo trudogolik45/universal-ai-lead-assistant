@@ -10,12 +10,13 @@ import uuid
 import pytest
 
 from tests.factories import create_company
-from tests.meta import MetaClient, messenger_payload
+from tests.meta import MetaClient, messenger_payload, whatsapp_payload
 from tests.openrouter import assistant_reply, respond_with
 from tests.polling import eventually, stays
 from tests.retry import run_retry
 
 PAGE_ID = "page-500"
+PHONE_NUMBER_ID = "pnid-500"
 SEND_API_PATH = "/meta/me/messages"
 LEAD_PATH = "/espocrm/api/v1/Lead"
 
@@ -39,13 +40,13 @@ def client(db, company):
     db.execute("select delete_client(%s, 'messenger', %s)", (company, sender_id))
 
 
-def conversation(crm, sender_id):
-    found = [c for c in crm.records("Conversation") if (c["channel"], c["senderId"]) == ("messenger", sender_id)]
+def conversation(crm, sender_id, channel="messenger"):
+    found = [c for c in crm.records("Conversation") if (c["channel"], c["senderId"]) == (channel, sender_id)]
     return found[0] if len(found) == 1 else None
 
 
-def client_leads(crm, sender_id):
-    found = conversation(crm, sender_id)
+def client_leads(crm, sender_id, channel="messenger"):
+    found = conversation(crm, sender_id, channel)
     return crm.related("Conversation", found["id"], "leads") if found else []
 
 
@@ -118,6 +119,20 @@ def test_lead_and_vehicle_are_updated_as_conversation_goes_on(fake, crm, meta, c
     assert lead["vehicleId"] == vehicle["id"]
     assert (lead["firstName"], lead["lastName"]) == ("Anna", "Nowak")
     assert len(crm.records("Lead")) == 1
+
+
+def test_whatsapp_client_phone_is_taken_from_number_when_not_given(db, fake, crm, meta, company):
+    db.execute("update companies set whatsapp_phone_number_id = %s where id = %s", (PHONE_NUMBER_ID, company))
+    wa_id = "48" + str(uuid.uuid4().int)[:9]
+    respond_with(fake, assistant_reply(lead_data={"name": "Jan Kowalski", "service": "Wymiana oleju"}))
+
+    try:
+        meta.post(whatsapp_payload(PHONE_NUMBER_ID, wa_id, "Jan Kowalski, wymiana oleju"))
+
+        [lead] = eventually(lambda: client_leads(crm, wa_id, "whatsapp"))
+        assert lead["phoneNumber"] == f"+{wa_id}"
+    finally:
+        db.execute("select delete_client(%s, 'whatsapp', %s)", (company, wa_id))
 
 
 def test_returning_client_gets_new_lead_but_stays_the_same_client_in_crm(db, fake, crm, meta, client):

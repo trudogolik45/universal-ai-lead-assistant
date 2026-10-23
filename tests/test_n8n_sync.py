@@ -15,6 +15,7 @@ STAND_SECRETS = [
     "test-app-secret",
     "test-verify-token",
     "test-page-token",
+    "test-whatsapp-token",
     "test-openrouter-key",
     "test-telegram-token",
     "test-telegram-webhook-secret",
