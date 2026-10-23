@@ -6,10 +6,11 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17-22-lead-contact-vehicle`, команда `uv run pytest -rs`.
-- Результат: **165 passed, 1 failed, 1 skipped** за 1286 с (хост под нагрузкой, load average ~20–30).
-  Упал `test_handoff.py::test_unknown_question_hands_conversation_off_to_human`: `httpx.ReadTimeout`
-  на отправке вебхука Meta — нагрузка хоста, не код. `test_handoff.py` перепрогнан отдельно: 18 passed.
+- Дата: 2026-10-23, ветка `spec-17-22-lead-contact-vehicle` (после мержа #24), команда `uv run pytest -rs`.
+- Результат: **176 passed, 1 failed, 1 skipped** за 1875 с (хост под нагрузкой, load average ~30).
+  Упал `test_assistant_reply.py::test_deleted_client_returns_as_stranger_without_old_history`: второй
+  ответ Клиенту ушёл раньше второго запроса к AI в журнале фейка — хвост соседнего теста под нагрузкой;
+  перепрогнан отдельно вместе с новыми тестами #22: passed.
 - Skipped: `tests/test_lead_delivery_google.py::test_qualified_lead_row_is_read_back_from_real_spreadsheet` —
   запись в настоящую Google-таблицу и чтение обратно. Нужны `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_SHEETS_TEST_SPREADSHEET_ID`; service account и
