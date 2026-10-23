@@ -17,7 +17,7 @@ import httpx
 import psycopg
 
 from scripts.espocrm import EspoCrm
-from scripts.espocrm_bootstrap import ensure_api_user
+from scripts.espocrm_bootstrap import bootstrap
 from scripts.n8n_sync import WORKFLOWS_DIR, push
 from tests.espocrm import ESPOCRM_ADMIN, EspoCrmStand
 
@@ -83,7 +83,7 @@ class Stand:
         return url
 
     def up_espocrm(self, env: dict[str, str]) -> EspoCrmStand:
-        """EspoCRM с нуля: пустая база `espocrm` в Postgres стенда, установка, API-пользователь n8n.
+        """EspoCRM с нуля: пустая база `espocrm` в Postgres стенда, установка, группы сотрудников, API-пользователь n8n.
         env — подстановки docker-compose.test.yml (адрес вебхука ответа сотрудника)."""
         self.env.update(env)
         recreate_database(self.up_postgres(), ESPOCRM_DATABASE)
@@ -92,7 +92,7 @@ class Stand:
         admin = EspoCrm(url, admin=ESPOCRM_ADMIN)
         # Healthcheck смотрит статику; первый запрос к API собирает кэш и под нагрузкой идёт долго.
         wait_until(lambda: admin.http.get("App/user").status_code == 200, f"API EspoCRM {url}", timeout=300)
-        api = EspoCrm(url, api_key=ensure_api_user(admin))
+        api = EspoCrm(url, api_key=bootstrap(admin))
         return EspoCrmStand(url, admin, api, websocket=self.host_url("espocrm-websocket", 8080))
 
     def n8n_url(self) -> str:

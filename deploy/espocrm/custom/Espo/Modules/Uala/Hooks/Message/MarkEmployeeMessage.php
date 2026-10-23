@@ -31,6 +31,7 @@ class MarkEmployeeMessage implements BeforeSave
         ]);
     }
 
+    /** Сотрудник Заказчика или администратор CRM, но не n8n (API) и не системные задания. */
     private function isEmployee(): bool
     {
         return $this->user->isRegular() || ($this->user->isAdmin() && !$this->user->isSystem());
