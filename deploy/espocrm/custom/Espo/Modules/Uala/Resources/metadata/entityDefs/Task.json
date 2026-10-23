@@ -1,0 +1,7 @@
+{
+    "fields": {
+        "parent": {
+            "entityList": ["__APPEND__", "Conversation"]
+        }
+    }
+}
