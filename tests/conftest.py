@@ -35,8 +35,20 @@ def database_url(stand):
 @pytest.fixture
 def db(database_url):
     with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute("truncate companies, inbox cascade")
+        truncate(conn)
         yield conn
+
+
+def truncate(conn, attempts: int = 3):
+    """Чистые таблицы к началу теста. Хвост обработки предыдущего теста в n8n может ещё писать
+    в них: Postgres снимает truncate как жертву deadlock — повторяем."""
+    for attempt in range(1, attempts + 1):
+        try:
+            conn.execute("truncate companies, inbox cascade")
+            return
+        except psycopg.errors.DeadlockDetected:
+            if attempt == attempts:
+                raise
 
 
 @pytest.fixture(scope="session")

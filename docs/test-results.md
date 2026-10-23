@@ -6,7 +6,14 @@
 
 ## Последний полный прогон
 
-PLACEHOLDER
+- Дата: 2026-10-23, ветка `spec-17-28-booking` (после мержа #27 и #25), команда `uv run pytest -rs`.
+- Результат: **205 passed, 1 skipped, 1 error** за 1609 с (load average ~20–25). Error — в подготовке
+  теста: `truncate` фикстуры `db` попал в deadlock с хвостом обработки предыдущего теста в n8n.
+  Фикстура теперь повторяет `truncate` при deadlock (`tests/conftest.py::truncate`).
+  Прогоном раньше (после мержа #27) упали `test_migrate.py::test_every_client_data_table_is_scoped_by_company`
+  (новые таблицы `appointments`, `slot_locks`) и `test_meta_webhook.py::test_message_for_unknown_page_is_ignored`
+  (запрос к AI от хвоста предыдущего теста; теперь тест смотрит только запросы о своём Сообщении) —
+  исправлены, перепрогнаны: passed.
 - Skipped: `tests/test_lead_delivery_google.py::test_qualified_lead_row_is_read_back_from_real_spreadsheet` —
   запись в настоящую Google-таблицу и чтение обратно. Нужны `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_SHEETS_TEST_SPREADSHEET_ID`; service account и
