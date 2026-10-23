@@ -6,6 +6,10 @@ from scripts.espocrm import EspoCrm
 
 # Учётка администратора из docker-compose.test.yml.
 ESPOCRM_ADMIN = ("admin", "test-espocrm-admin")
+# Куда хук EspoCRM шлёт Сообщение сотрудника: в контрактных тестах — фейк-сервер вместо n8n.
+EMPLOYEE_REPLY_PATH = "/n8n/webhook/employee-reply"
+# Секрет вебхука из docker-compose.test.yml: его же ждёт n8n.
+EMPLOYEE_REPLY_SECRET = "test-employee-reply-secret"
 
 
 @dataclass

@@ -57,6 +57,7 @@ services:
       TELEGRAM_WEBHOOK_SECRET: test-telegram-webhook-secret
       RETRY_WEBHOOK_SECRET: test-retry-secret
       ESPOCRM_API_KEY: test-espocrm-key
+      EMPLOYEE_REPLY_SECRET: test-employee-reply-secret
       # Расписание retry в тестах не срабатывает (1 января): прогоны только по вебхуку.
       RETRY_SCHEDULE_CRON: ${RETRY_SCHEDULE_CRON:-0 0 1 1 *}
       # Service account: ключ генерирует фикстура n8n_url (tests/google.py).
@@ -95,6 +96,9 @@ services:
       ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: tcp://*:7777
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: tcp://espocrm-websocket:7777
+      # Ответ сотрудника (хук модуля Uala): контрактные тесты подставляют фейк-сервер.
+      ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_URL: ${EMPLOYEE_REPLY_URL:-http://n8n:5678/webhook/employee-reply}
+      ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_SECRET: test-employee-reply-secret
     volumes:
       - /var/www/html/data
     extra_hosts:

@@ -6,8 +6,8 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17` (после мержа #27), команда `uv run pytest -rs`.
-- Результат: **185 passed, 1 skipped** за 1060 с.
+- Дата: 2026-10-23, ветка `spec-17` (после мержа #27 и #25), команда `uv run pytest -rs`.
+- Результат: **192 passed, 1 skipped** за 1171 с.
 - Skipped: `tests/test_lead_delivery_google.py::test_qualified_lead_row_is_read_back_from_real_spreadsheet` —
   запись в настоящую Google-таблицу и чтение обратно. Нужны `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_SHEETS_TEST_SPREADSHEET_ID`; service account и
@@ -64,6 +64,8 @@
 | Обязательные поля автосервиса задаёт Заказчик (#22), Заявка — по-польски | `test_assistant_reply.py::test_auto_service_lead_is_qualified_only_with_fields_set_by_company`, `test_assistant_reply.py::test_lead_is_collected_in_polish_whatever_client_language`, `test_schema.py::test_auto_service_company_requires_phone_and_vehicle` | passed |
 | Заявка в настоящей EspoCRM (#22): связи с Клиентом, Автомобилем и Беседой, поля услуга и удобное время; без фамилии и с телефоном без кода страны CRM отказывает | `test_espocrm.py::test_api_user_writes_lead_of_client_with_vehicle_in_conversation`, `test_espocrm.py::test_crm_refuses_lead_and_client_without_last_name_or_with_phone_without_country_code` | passed |
 | WhatsApp (#27): подписанный вебхук проходит Приём, чужая подпись — 401, статус доставки игнорируется, дубль — один ответ; ответ внутри 24 часов — свободный текст, позже — шаблон `news_update` на pl или en | `test_whatsapp.py` (6) | passed |
+| Ответ сотрудника из CRM (#25): уходит Клиенту в его Канал (Messenger, WhatsApp), Ассистент в Беседе замолкает, позже 24 часов — с меткой HUMAN_AGENT, чужой секрет отклоняется | `test_employee_reply.py` (5) | passed |
+| Хук ответа сотрудника в настоящей EspoCRM (#25): Сообщение сотрудника становится исходящим от сотрудника и вызывает n8n с текстом и адресом Клиента; Сообщения n8n обратно не уходят | `test_espocrm.py::test_employee_message_in_conversation_calls_n8n_with_text_and_client_address`, `test_messages_written_by_n8n_do_not_call_n8n_back` | passed |
 | Задача человеку (#24): Передача человеку создаёт Task со ссылкой на Беседу и сводкой на польском; назначение — команда `Administratorzy`, в ней активный сотрудник с наименьшим числом открытых задач; Ассистент молчит в Беседе, второй задачи нет; несозданную задачу создаёт retry | `test_handoff_task.py` (4) | passed |
 | Задача человеку в настоящей EspoCRM (#24): API-пользователь находит активных членов команды и считает открытые задачи запросами переходника; Task привязан к Беседе, назначенный сотрудник получает уведомление CRM; письмо о назначении Task включено | `test_espocrm.py::test_api_user_finds_active_team_members_as_crm_adapter_does`, `test_api_user_counts_open_tasks_of_employee_as_crm_adapter_does`, `test_handoff_task_links_to_conversation_and_notifies_assigned_employee`, `test_crm_emails_employee_about_assigned_task` | passed |
 | Фейк EspoCRM повторяет REST API: CRUD, обязательные поля, поиск `equals`/`in`/`linkedWith`, `total` сверх `maxSize`, телефон в международном формате, связи, 401 без ключа, 503 при недоступности CRM или одной сущности | `test_fake_espocrm.py` (16) | passed |

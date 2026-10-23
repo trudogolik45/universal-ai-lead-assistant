@@ -4,6 +4,7 @@ import psycopg
 import pytest
 
 from scripts.migrate import migrate
+from tests.espocrm import EMPLOYEE_REPLY_PATH
 from tests.fake_espocrm import FakeEspoCrm
 from tests.fake_server import FakeServer
 from tests.google import ServiceAccount
@@ -39,11 +40,11 @@ def db(database_url):
 
 
 @pytest.fixture(scope="session")
-def espocrm(stand):
+def espocrm(stand, fake_server):
     """Настоящая EspoCRM стенда (tests/espocrm.py): своя база в Postgres стенда, свежая установка
-    на прогон, модуль Uala и API-пользователь n8n, как в проде. Записи между тестами не чистятся:
-    тест создаёт свои."""
-    return stand.up_espocrm()
+    на прогон, модуль Uala и API-пользователь n8n, как в проде. Ответ сотрудника хук шлёт
+    в фейк-сервер, а не в n8n. Записи между тестами не чистятся: тест создаёт свои."""
+    return stand.up_espocrm({"EMPLOYEE_REPLY_URL": fake_server.container_url(EMPLOYEE_REPLY_PATH)})
 
 
 @pytest.fixture(scope="session")
