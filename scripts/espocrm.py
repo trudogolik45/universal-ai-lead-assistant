@@ -5,6 +5,7 @@
 """
 
 import json
+import os
 
 import httpx
 
@@ -45,3 +46,11 @@ class EspoCrm:
 
     def related(self, entity: str, record_id: str, link: str) -> list[dict]:
         return self.request("GET", f"{entity}/{record_id}/{link}")["list"]
+
+
+def admin_from_env() -> EspoCrm:
+    """Клиент администратора по env: ESPOCRM_URL, ESPOCRM_ADMIN_PASSWORD, ESPOCRM_ADMIN_USERNAME (admin)."""
+    return EspoCrm(
+        os.environ["ESPOCRM_URL"],
+        admin=(os.environ.get("ESPOCRM_ADMIN_USERNAME", "admin"), os.environ["ESPOCRM_ADMIN_PASSWORD"]),
+    )

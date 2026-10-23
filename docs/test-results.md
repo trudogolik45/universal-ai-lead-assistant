@@ -6,8 +6,8 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-21, ветка `fix/review`, команда `uv run pytest -rs`, два прогона подряд.
-- Результат: **100 passed, 1 skipped** за 160 с и 158 с.
+- Дата: 2026-10-23, ветка `spec-17-23-knowledge-base-crm`, команда `uv run pytest -rs`.
+- Результат: **136 passed, 1 skipped** за 624 с (хост под нагрузкой, load average ~100).
 - Skipped: `tests/test_lead_delivery_google.py::test_qualified_lead_row_is_read_back_from_real_spreadsheet` —
   запись в настоящую Google-таблицу и чтение обратно. Нужны `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_SHEETS_TEST_SPREADSHEET_ID`; service account и
@@ -52,9 +52,12 @@
 | Передача человеку после уже объявленной Заявки | `test_handoff.py::test_handoff_after_announced_qualified_lead_still_sends_summary` | passed |
 | Кнопки Telegram: чужой секрет и чужая группа отклоняются | `test_handoff.py::test_button_press_with_wrong_secret_is_rejected`, `test_button_from_other_group_does_not_touch_lead` | passed |
 | Retry: ручной запуск только с секретом; закрытие Бесед после 7 дней тишины | `test_retry.py::test_wrong_secret_is_rejected_and_runs_nothing`, `test_conversation_silent_for_seven_days_is_closed_with_its_lead`, `test_conversation_with_recent_messages_stays_open` | passed |
-| Схема: одна активная Беседа, одна Заявка на Беседу, изоляция Заказчиков, перечисления | `test_schema.py` (10 тестов), `test_migrate.py` (3) | passed |
-| Сиды: три польских профиля, идемпотентность, правки Заказчика не затираются | `test_seed.py` (6) | passed |
+| Схема: одна активная Беседа, одна Заявка на Беседу, изоляция Заказчиков, перечисления | `test_schema.py` (9 тестов), `test_migrate.py` (3) | passed |
+| Сиды: три польских профиля, идемпотентность, правки Заказчика не затираются | `test_seed.py` (4) | passed |
 | Экспорт workflow: байт в байт с репо, без секретов и данных прогонов | `test_n8n_sync.py` (4) | passed |
+| EspoCRM (второй шов, настоящая EspoCRM в Docker, #19): API-пользователь n8n создаёт и читает Беседу и Сообщения, Автомобиль Клиента, Согласие на рекламу; права без админа; bootstrap идемпотентен; WebSocket включён | `test_espocrm.py` (8) | passed |
+| База знаний из EspoCRM (#23): цена в ответе — из CRM, правка в CRM видна в следующем ответе, без CRM Ассистент не угадывает, Сообщение ждёт в буфере и retry отвечает после возврата CRM | `test_knowledge_base.py::test_assistant_answers_price_question_from_crm_knowledge_base`, `test_price_changed_in_crm_reaches_the_next_reply`, `test_without_crm_knowledge_base_assistant_does_not_guess_and_message_waits_in_buffer`, `test_inbox.py::test_failed_processing_is_retried_from_buffer` | passed |
+| База знаний в настоящей EspoCRM (#23): API-пользователь читает её тем же запросом, что n8n, и сразу видит правку; менять не может; виды записей ограничены; демо-база AutoPro заливается один раз и не затирает правки | `test_espocrm.py::test_api_user_reads_knowledge_base_as_assistant_does`, `test_owner_edit_in_crm_is_read_by_api_user_right_away`, `test_api_user_cannot_change_knowledge_base`, `test_knowledge_kind_is_service_hours_company_faq_or_rule`, `test_demo_knowledge_base_is_seeded_once_and_keeps_owner_edits` | passed |
 
 Флаки «не дождались за 30 с» в случайных тестах и `test_crm_webhook_is_not_called_when_not_set`
 (запоздалый CRM POST предыдущего теста) — одна причина: фейк закрывал соединение первым, TIME_WAIT
@@ -62,4 +65,3 @@
 опаздывал в следующий тест после сброса фейка. Теперь соединение закрывает n8n (`tests/fake_server.py`,
 `tests/test_fake_server.py`). `test_handoff.py::test_message_after_close_opens_new_conversation_and_lead`
 проверял статус новой Заявки до ответа AI — теперь ждёт его через `eventually`.
-| EspoCRM (второй шов, настоящая EspoCRM в Docker, #19): API-пользователь n8n создаёт и читает Беседу и Сообщения, Автомобиль Клиента, Согласие на рекламу; права без админа; bootstrap идемпотентен; WebSocket включён | `test_espocrm.py` (8) | passed |

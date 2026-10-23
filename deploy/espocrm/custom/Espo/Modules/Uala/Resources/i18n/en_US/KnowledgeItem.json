@@ -1,0 +1,26 @@
+{
+    "fields": {
+        "kind": "Kind",
+        "description": "Content",
+        "price": "Price (PLN)",
+        "priceFrom": "Price \"from\""
+    },
+    "options": {
+        "kind": {
+            "service": "Service",
+            "hours": "Opening hours",
+            "company": "About the company",
+            "faq": "Question and answer",
+            "rule": "Rule"
+        }
+    },
+    "tooltips": {
+        "kind": "Service — with a price; Opening hours; About the company — address, contacts, payment, warranty; Question and answer — the name is the question, the content is the answer; Rule — what the assistant does not promise.",
+        "description": "The assistant answers clients only from the knowledge base. A change applies from the client's next message.",
+        "price": "Gross price in PLN. Empty — the assistant does not quote a price and hands the question over to a human.",
+        "priceFrom": "Checked — minimum price: the assistant says \"from … PLN\"."
+    },
+    "labels": {
+        "Create KnowledgeItem": "Add to knowledge base"
+    }
+}

@@ -2,11 +2,13 @@
     "scopeNames": {
         "Conversation": "Rozmowa",
         "Message": "Wiadomość",
-        "Vehicle": "Pojazd"
+        "Vehicle": "Pojazd",
+        "KnowledgeItem": "Wpis bazy wiedzy"
     },
     "scopeNamesPlural": {
         "Conversation": "Rozmowy",
         "Message": "Wiadomości",
-        "Vehicle": "Pojazdy"
+        "Vehicle": "Pojazdy",
+        "KnowledgeItem": "Baza wiedzy"
     }
 }

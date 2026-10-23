@@ -13,7 +13,7 @@ def test_schema_has_all_entities(db):
         )
     }
 
-    assert {"companies", "knowledge_items", "conversations", "messages", "leads"} <= tables
+    assert {"companies", "conversations", "messages", "leads"} <= tables
 
 
 def test_every_client_data_table_is_scoped_by_company(db):
@@ -25,4 +25,4 @@ def test_every_client_data_table_is_scoped_by_company(db):
         )
     }
 
-    assert scoped == {"knowledge_items", "conversations", "messages", "leads"}
+    assert scoped == {"conversations", "messages", "leads"}
