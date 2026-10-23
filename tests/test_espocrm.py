@@ -7,6 +7,8 @@
 import socket
 
 from scripts.espocrm_bootstrap import API_USER, ensure_api_user
+from scripts.espocrm_knowledge import seed_knowledge
+from tests.knowledge import assistant_knowledge_query
 
 
 def create_conversation(espocrm, sender_id: str) -> dict:
@@ -161,3 +163,72 @@ def websocket_handshake(address: str) -> str:
         sock.sendall(request.encode())
         # За заголовками сервер сразу шлёт двоичный кадр WAMP: читаем только статусную строку.
         return sock.recv(1024).split(b"\r\n")[0].decode()
+
+
+def create_knowledge_item(espocrm, **fields) -> dict:
+    return espocrm.admin.create("KnowledgeItem", fields)
+
+
+def knowledge_base(client) -> list[dict]:
+    """База знаний тем же запросом, что шлёт Ассистент (узел «Load knowledge base» в n8n)."""
+    return client.request("GET", "KnowledgeItem", params=assistant_knowledge_query())["list"]
+
+
+def test_api_user_reads_knowledge_base_as_assistant_does(espocrm):
+    item = create_knowledge_item(
+        espocrm,
+        name="Wymiana klocków hamulcowych (kontrakt)",
+        kind="service",
+        description="Jedna oś, bez kosztu klocków. Około 1 godziny.",
+        price=140,
+        priceFrom=True,
+    )
+
+    read = next(found for found in knowledge_base(espocrm.api) if found["id"] == item["id"])
+
+    assert (read["name"], read["kind"], read["description"], read["price"], read["priceFrom"]) == (
+        "Wymiana klocków hamulcowych (kontrakt)",
+        "service",
+        "Jedna oś, bez kosztu klocków. Około 1 godziny.",
+        140,
+        True,
+    )
+
+
+def test_owner_edit_in_crm_is_read_by_api_user_right_away(espocrm):
+    item = create_knowledge_item(espocrm, name="Diagnostyka zawieszenia (kontrakt)", kind="service", price=100)
+
+    espocrm.admin.update("KnowledgeItem", item["id"], {"price": 110})
+
+    assert [found["price"] for found in knowledge_base(espocrm.api) if found["id"] == item["id"]] == [110]
+
+
+def test_knowledge_kind_is_service_hours_company_faq_or_rule(espocrm):
+    response = espocrm.admin.http.post("KnowledgeItem", json={"name": "Promocja", "kind": "promo"})
+
+    assert response.status_code == 400
+
+
+def test_api_user_cannot_change_knowledge_base(espocrm):
+    response = espocrm.api.http.post("KnowledgeItem", json={"name": "Wymiana oleju za 1 zł", "kind": "service"})
+
+    assert response.status_code == 403
+
+
+def knowledge_total(espocrm) -> int:
+    return espocrm.admin.request("GET", "KnowledgeItem", params={"maxSize": 1})["total"]
+
+
+def test_demo_knowledge_base_is_seeded_once_and_keeps_owner_edits(espocrm):
+    seed_knowledge(espocrm.admin)
+    total = knowledge_total(espocrm)
+    oil = espocrm.admin.find(
+        "KnowledgeItem", [{"type": "equals", "attribute": "name", "value": "Wymiana oleju silnikowego i filtra oleju"}]
+    )[0]
+    espocrm.admin.update("KnowledgeItem", oil["id"], {"price": 130})
+
+    seed_knowledge(espocrm.admin)
+
+    assert knowledge_total(espocrm) == total
+    assert espocrm.admin.read("KnowledgeItem", oil["id"])["price"] == 130
+    assert {item["kind"] for item in knowledge_base(espocrm.admin)} == {"service", "hours", "company", "faq", "rule"}

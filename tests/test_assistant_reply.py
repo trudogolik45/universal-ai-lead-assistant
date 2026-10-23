@@ -3,8 +3,10 @@ import uuid
 
 import pytest
 
+from tests import knowledge
 from tests.factories import create_company, create_lead, open_conversation
 from tests.fake_server import Response
+from tests.knowledge import knowledge_item
 from tests.meta import MetaClient, messenger_payload
 from tests.openrouter import assistant_reply, completion_requests, raw_reply, respond_with
 from tests.polling import eventually, stays
@@ -26,17 +28,13 @@ def meta(n8n_url):
 
 
 @pytest.fixture
-def company(db):
+def company(db, fake):
     company_id = create_company(db, "Assistant Co")
     db.execute(
         "update companies set messenger_page_id = %s, ai_model = 'test/model-x' where id = %s",
         (PAGE_ID, company_id),
     )
-    db.execute(
-        "insert into knowledge_items (company_id, kind, title, body, price)"
-        " values (%s, 'service', 'Montaż mebli', 'Skręcanie mebli z paczek.', 120)",
-        (company_id,),
-    )
+    knowledge.respond_with(fake, [knowledge_item("Montaż mebli", description="Skręcanie mebli z paczek.", price=120)])
     return company_id
 
 

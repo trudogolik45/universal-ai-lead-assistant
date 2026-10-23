@@ -7,19 +7,22 @@ make espocrm-api-user на VPS сразу пишет его в ~/uala/.env (ESPO
   ESPOCRM_URL=... ESPOCRM_ADMIN_PASSWORD=... uv run python -m scripts.espocrm_bootstrap
 """
 
-import os
-
-from scripts.espocrm import EspoCrm
+from scripts.espocrm import EspoCrm, admin_from_env
 
 API_USER = "n8n"
 ROLE_NAME = "n8n"
 
 # Уровни прав EspoCRM: create/delete — yes|no, read/edit/stream — all|team|own|no.
 RECORD_ACCESS = {"create": "yes", "read": "all", "edit": "all", "delete": "no", "stream": "all"}
+# Базу знаний правит Заказчик, n8n её только читает.
+READ_ONLY = {"create": "no", "read": "all", "edit": "no", "delete": "no", "stream": "no"}
 # Сущности, с которыми работает n8n: свои (модуль Uala) и встроенные.
 ROLE_ACL = {
-    entity: RECORD_ACCESS
-    for entity in ("Contact", "Conversation", "Message", "Vehicle", "Lead", "Meeting", "Task")
+    **{
+        entity: RECORD_ACCESS
+        for entity in ("Contact", "Conversation", "Message", "Vehicle", "Lead", "Meeting", "Task")
+    },
+    "KnowledgeItem": READ_ONLY,
 }
 
 
@@ -52,11 +55,7 @@ def find_id(admin: EspoCrm, entity: str, attribute: str, value: str) -> str | No
 
 
 def main() -> None:
-    admin = EspoCrm(
-        os.environ["ESPOCRM_URL"],
-        admin=(os.environ.get("ESPOCRM_ADMIN_USERNAME", "admin"), os.environ["ESPOCRM_ADMIN_PASSWORD"]),
-    )
-    print(ensure_api_user(admin))
+    print(ensure_api_user(admin_from_env()))
 
 
 if __name__ == "__main__":

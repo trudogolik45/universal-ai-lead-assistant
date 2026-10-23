@@ -1,0 +1,75 @@
+{
+    "fields": {
+        "name": {
+            "type": "varchar",
+            "required": true,
+            "pattern": "$noBadCharacters"
+        },
+        "kind": {
+            "type": "enum",
+            "required": true,
+            "options": ["service", "hours", "company", "faq", "rule"],
+            "default": "service",
+            "tooltip": true
+        },
+        "description": {
+            "type": "text",
+            "tooltip": true
+        },
+        "price": {
+            "type": "float",
+            "min": 0,
+            "decimalPlaces": 2,
+            "tooltip": true
+        },
+        "priceFrom": {
+            "type": "bool",
+            "default": false,
+            "tooltip": true
+        },
+        "createdAt": {
+            "type": "datetime",
+            "readOnly": true
+        },
+        "modifiedAt": {
+            "type": "datetime",
+            "readOnly": true
+        },
+        "createdBy": {
+            "type": "link",
+            "readOnly": true,
+            "view": "views/fields/user"
+        },
+        "modifiedBy": {
+            "type": "link",
+            "readOnly": true,
+            "view": "views/fields/user"
+        }
+    },
+    "links": {
+        "createdBy": {
+            "type": "belongsTo",
+            "entity": "User"
+        },
+        "modifiedBy": {
+            "type": "belongsTo",
+            "entity": "User"
+        }
+    },
+    "collection": {
+        "orderBy": "kind",
+        "order": "asc"
+    },
+    "indexes": {
+        "kindName": {
+            "columns": ["kind", "name", "deleted"]
+        },
+        "createdAt": {
+            "columns": ["createdAt"]
+        },
+        "createdAtId": {
+            "unique": true,
+            "columns": ["createdAt", "id"]
+        }
+    }
+}

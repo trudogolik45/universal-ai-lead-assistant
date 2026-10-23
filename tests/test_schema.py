@@ -103,16 +103,6 @@ def test_european_language_is_accepted_for_company_and_conversation(db, language
     assert db.execute("select language from conversations").fetchone()[0] == language
 
 
-def test_knowledge_item_kind_is_restricted(db):
-    company = create_company(db)
-
-    with pytest.raises(psycopg.errors.CheckViolation):
-        db.execute(
-            "insert into knowledge_items (company_id, kind, title) values (%s, 'promo', 'X')",
-            (company,),
-        )
-
-
 def test_required_fields_must_be_lead_fields(db):
     company = create_company(db)
 

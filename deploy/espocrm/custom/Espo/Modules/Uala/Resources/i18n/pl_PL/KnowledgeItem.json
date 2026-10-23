@@ -1,0 +1,26 @@
+{
+    "fields": {
+        "kind": "Rodzaj",
+        "description": "Treść",
+        "price": "Cena (zł)",
+        "priceFrom": "Cena „od”"
+    },
+    "options": {
+        "kind": {
+            "service": "Usługa",
+            "hours": "Godziny pracy",
+            "company": "O firmie",
+            "faq": "Pytanie i odpowiedź",
+            "rule": "Zasada"
+        }
+    },
+    "tooltips": {
+        "kind": "Usługa — z ceną; Godziny pracy; O firmie — adres, kontakt, płatności, gwarancja; Pytanie i odpowiedź — nazwa to pytanie, treść to odpowiedź; Zasada — czego asystent nie obiecuje.",
+        "description": "Asystent odpowiada klientom tylko na podstawie bazy wiedzy. Zmiana działa od następnej wiadomości klienta.",
+        "price": "Cena brutto w zł. Puste — asystent nie poda ceny i przekaże pytanie człowiekowi.",
+        "priceFrom": "Zaznaczone — cena minimalna: asystent powie „od … zł”."
+    },
+    "labels": {
+        "Create KnowledgeItem": "Dodaj do bazy wiedzy"
+    }
+}
