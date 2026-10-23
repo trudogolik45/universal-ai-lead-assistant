@@ -1,5 +1,5 @@
 """Фейк REST API EspoCRM в фейк-сервере: записи в памяти, CRUD, обязательные поля, поиск
-(`equals`, `notEquals`, `in`, `lessThan`, `greaterThan`, `linkedWith`), связи.
+(`equals`, `notEquals`, `in`, `lessThan`, `greaterThan`, `greaterThanOrEquals`, `linkedWith`), связи.
 
 Подключён к фейк-серверу фикстурой `fake_server` (префикс /espocrm, env n8n ESPOCRM_BASE_URL).
 Тест читает записанное через `records(entity)` / `related(...)`, заводит своё через `add(...)`,
@@ -133,7 +133,8 @@ class FakeEspoCrm:
         return Response(200, self._store(entity, data))
 
     def _store(self, entity: str, data: dict) -> dict:
-        record = {**data, "id": uuid.uuid4().hex[:17], "createdAt": now()}
+        # createdAt из data — запись, заведённая «в прошлом» (crm.add); n8n его не шлёт.
+        record = {"createdAt": now(), **data, "id": uuid.uuid4().hex[:17]}
         self._records.setdefault(entity, {})[record["id"]] = record
         return dict(record)
 
@@ -205,6 +206,8 @@ def condition_matches(record: dict, condition: dict) -> bool:
         return record.get(attribute) is not None and record[attribute] < value
     if kind == "greaterThan":
         return record.get(attribute) is not None and record[attribute] > value
+    if kind == "greaterThanOrEquals":
+        return record.get(attribute) is not None and record[attribute] >= value
     if kind == "in":
         return record.get(attribute) in value
     if kind == "linkedWith":

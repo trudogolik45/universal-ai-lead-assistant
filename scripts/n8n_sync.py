@@ -44,6 +44,8 @@ SECRET_ENV = (
     "ESPOCRM_ADMIN_PASSWORD",
     "ESPOCRM_API_KEY",
     "EMPLOYEE_REPLY_SECRET",
+    "REPORT_WEBHOOK_SECRET",
+    "SMTP_PASSWORD",
 )
 
 # Короче — не ищем: короткая строка («test») встречается в любом JSON и даёт ложную тревогу.
@@ -102,10 +104,10 @@ def secret_values(env: dict[str, str]) -> dict[str, str]:
 
 
 def push(n8n: N8n, workflows_dir: Path = WORKFLOWS_DIR) -> None:
-    database_url = container_env(n8n).get("DATABASE_URL")
-    if not database_url:
+    env = container_env(n8n)
+    if not env.get("DATABASE_URL"):
         raise SystemExit("В env n8n нет DATABASE_URL: credentials Postgres не из чего собрать")
-    import_file(n8n, "import:credentials", json.dumps(credentials(database_url)))
+    import_file(n8n, "import:credentials", json.dumps(credentials(env)))
     paths = sorted(workflows_dir.glob("*.json"))
     for path in paths:
         import_file(n8n, "import:workflow", path.read_text())

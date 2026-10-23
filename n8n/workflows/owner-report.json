@@ -1,0 +1,513 @@
+{
+  "id": "uala0ownerReport",
+  "name": "owner-report",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "c7d2a1e5-0034-4000-8000-000000000001",
+      "name": "Every day",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "={{ $env.REPORT_DAILY_CRON || '0 7 * * *' }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "period",
+              "value": "daily",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e5-0034-4000-8000-000000000002",
+      "name": "Daily",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "id": "c7d2a1e5-0034-4000-8000-000000000003",
+      "name": "Every week",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "={{ $env.REPORT_WEEKLY_CRON || '0 7 * * 1' }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "period",
+              "value": "weekly",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e5-0034-4000-8000-000000000004",
+      "name": "Weekly",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "id": "c7d2a1e5-0034-4000-8000-000000000005",
+      "name": "Run now",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        600
+      ],
+      "webhookId": "c7d2a1e5-0034-4000-8000-0000000000aa",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "owner-report",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "c7d2a1e5-0034-4000-8000-000000000006",
+      "name": "Secret valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$env.REPORT_WEBHOOK_SECRET && $json.headers['x-report-secret'] === $env.REPORT_WEBHOOK_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c34per",
+              "leftValue": "={{ ['daily', 'weekly'].includes($json.body.period) && (!$json.body.today || /^\\d{4}-\\d{2}-\\d{2}$/.test($json.body.today)) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e5-0034-4000-8000-000000000007",
+      "name": "Period valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        500
+      ]
+    },
+    {
+      "id": "c7d2a1e5-0034-4000-8000-000000000008",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        660,
+        400
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e5-0034-4000-8000-000000000009",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        660,
+        600
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e5-0034-4000-8000-000000000010",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        800
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "period",
+              "value": "={{ $('Run now').item.json.body.period }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "today",
+              "value": "={{ $('Run now').item.json.body.today || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e5-0034-4000-8000-000000000011",
+      "name": "Requested",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Период отчёта по Варшаве: дневной — вчера, недельный — прошлая неделя с понедельника по воскресенье.\n// today (YYYY-MM-DD) — ручной запуск как будто в другой день; по расписанию — сегодня.\n// Границы — даты EspoCRM в UTC: с переходом на зимнее время сутки длятся 25 часов.\nconst TIME_ZONE = 'Europe/Warsaw';\nconst ESPO_FORMAT = 'yyyy-MM-dd HH:mm:ss';\nconst DAY_FORMAT = 'dd.MM.yyyy';\nconst { period, today } = $json;\nconst day = today ? DateTime.fromISO(today, { zone: TIME_ZONE }) : DateTime.now().setZone(TIME_ZONE);\nconst weekly = period === 'weekly';\nconst end = weekly ? day.startOf('week') : day.startOf('day');\nconst start = end.minus(weekly ? { weeks: 1 } : { days: 1 });\nconst label = weekly\n  ? `${start.toFormat(DAY_FORMAT)}–${end.minus({ days: 1 }).toFormat(DAY_FORMAT)}`\n  : start.toFormat(DAY_FORMAT);\nreturn {\n  json: { period, label, from: start.toUTC().toFormat(ESPO_FORMAT), to: end.toUTC().toFormat(ESPO_FORMAT) },\n};"
+      },
+      "id": "c7d2a1e5-0034-4000-8000-000000000012",
+      "name": "Report period",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "id": "c7d2a1e5-0034-4000-8000-000000000013",
+      "name": "Count in CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmAdapter0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "report",
+            "data": "={{ { from: $json.from, to: $json.to } }}"
+          },
+          "matchingColumns": [
+            "operation",
+            "data"
+          ],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Письмо владельцу на польском: по строке на Канал и итог. Конверсия — Записи / Заявки периода;\n// Заявок нет — прочерк. «Bez kanału» — записи, которым сотрудник не указал Канал, только если они есть.\nconst TITLES = { daily: 'Raport dzienny', weekly: 'Raport tygodniowy' };\nconst CHANNELS = { messenger: 'Messenger', instagram: 'Instagram', whatsapp: 'WhatsApp', call: 'Telefon' };\nconst { period, label } = $('Report period').first().json;\nconst { channels, total } = $json;\n\nfunction line(name, { leads, appointments }) {\n  const conversion = leads ? `${Math.round((appointments / leads) * 100)}%` : '—';\n  return `${name}: zgłoszenia ${leads}, wizyty ${appointments}, konwersja ${conversion}`;\n}\n\nconst inChannels = Object.values(channels).reduce(\n  (sum, c) => ({ leads: sum.leads + c.leads, appointments: sum.appointments + c.appointments }),\n  { leads: 0, appointments: 0 },\n);\nconst other = { leads: total.leads - inChannels.leads, appointments: total.appointments - inChannels.appointments };\nconst subject = `${TITLES[period]}: ${label}`;\nconst text = [\n  subject,\n  '',\n  ...Object.entries(CHANNELS).map(([key, name]) => line(name, channels[key])),\n  ...(other.leads || other.appointments ? [line('Bez kanału', other)] : []),\n  line('Razem', total),\n  '',\n  'Zgłoszenia i wizyty utworzone w CRM w tym okresie. Konwersja to wizyty podzielone przez zgłoszenia.',\n].join('\\n');\nreturn { json: { subject, text } };"
+      },
+      "id": "c7d2a1e5-0034-4000-8000-000000000014",
+      "name": "Report mail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.SMTP_FROM }}",
+        "toEmail": "={{ $env.OWNER_REPORT_EMAIL }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "c7d2a1e5-0034-4000-8000-000000000015",
+      "name": "Send to owner",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1760,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "uala0smtp0000001",
+          "name": "SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every day": {
+      "main": [
+        [
+          {
+            "node": "Daily",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every week": {
+      "main": [
+        [
+          {
+            "node": "Weekly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now": {
+      "main": [
+        [
+          {
+            "node": "Secret valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Secret valid": {
+      "main": [
+        [
+          {
+            "node": "Period valid",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Period valid": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200": {
+      "main": [
+        [
+          {
+            "node": "Requested",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily": {
+      "main": [
+        [
+          {
+            "node": "Report period",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly": {
+      "main": [
+        [
+          {
+            "node": "Report period",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requested": {
+      "main": [
+        [
+          {
+            "node": "Report period",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report period": {
+      "main": [
+        [
+          {
+            "node": "Count in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count in CRM": {
+      "main": [
+        [
+          {
+            "node": "Report mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report mail": {
+      "main": [
+        [
+          {
+            "node": "Send to owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

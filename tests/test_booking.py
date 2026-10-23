@@ -132,6 +132,8 @@ def test_client_is_booked_into_free_slot_as_meeting_of_client_and_vehicle(fake, 
     [vehicle] = eventually(lambda: crm.records("Vehicle"))
     [linked] = eventually(lambda: [m for m in crm.records("Meeting") if m.get("vehicleId")])
     assert (linked["contactsIds"], linked["vehicleId"]) == ([contact["id"]], vehicle["id"])
+    # Канал Записи — для отчётов владельцу.
+    assert linked["channel"] == "messenger"
 
 
 def test_booked_client_is_not_booked_again(fake, crm, meta, client, calendar):

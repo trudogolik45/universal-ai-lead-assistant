@@ -135,6 +135,20 @@ def test_whatsapp_client_phone_is_taken_from_number_when_not_given(db, fake, crm
         db.execute("select delete_client(%s, 'whatsapp', %s)", (company, wa_id))
 
 
+def test_lead_in_crm_carries_channel_of_conversation_for_owner_reports(db, fake, crm, meta, company):
+    db.execute("update companies set whatsapp_phone_number_id = %s where id = %s", (PHONE_NUMBER_ID, company))
+    wa_id = "48" + str(uuid.uuid4().int)[:9]
+    respond_with(fake, assistant_reply(lead_data={"name": "Jan Kowalski", "service": "Wymiana oleju"}))
+
+    try:
+        meta.post(whatsapp_payload(PHONE_NUMBER_ID, wa_id, "Jan Kowalski, wymiana oleju"))
+
+        [lead] = eventually(lambda: client_leads(crm, wa_id, "whatsapp"))
+        assert lead["channel"] == "whatsapp"
+    finally:
+        db.execute("select delete_client(%s, 'whatsapp', %s)", (company, wa_id))
+
+
 def test_returning_client_gets_new_lead_but_stays_the_same_client_in_crm(db, fake, crm, meta, client):
     respond_with(
         fake,

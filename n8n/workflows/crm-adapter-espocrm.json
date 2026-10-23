@@ -669,7 +669,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Заявка в виде полей EspoCRM. Имя неизвестно — имя Беседы: без lastName CRM не пишет ни Клиента, ни Заявку.\n// Телефон не в международном формате CRM отвергает (400): такой не пишем, Заявка важнее.\n// В WhatsApp отправитель (wa_id) — номер Клиента без «+»: он телефон, если Клиент не назвал другой.\nconst d = $json.data;\nconst words = (d.name || '').trim().split(/\\s+/).filter(Boolean);\nconst phone = (d.phone || (d.channel === 'whatsapp' ? `+${d.sender_id}` : '')).replace(/[\\s().-]/g, '');\nconst vehicle = [d.vehicle_brand, d.vehicle_model].filter(Boolean).join(' ');\nreturn {\n  json: {\n    person: {\n      firstName: words.slice(0, -1).join(' ') || null,\n      lastName: words.at(-1) || `${d.channel} · ${d.sender_id}`,\n      ...(/^\\+[0-9]{8,15}$/.test(phone) ? { phoneNumber: phone } : {}),\n    },\n    vehicle: vehicle ? { name: vehicle, brand: d.vehicle_brand, model: d.vehicle_model } : null,\n    lead: { service: d.service, description: d.description, desiredTime: d.desired_date },\n  },\n};"
+        "jsCode": "// Заявка в виде полей EspoCRM. Имя неизвестно — имя Беседы: без lastName CRM не пишет ни Клиента, ни Заявку.\n// Телефон не в международном формате CRM отвергает (400): такой не пишем, Заявка важнее.\n// В WhatsApp отправитель (wa_id) — номер Клиента без «+»: он телефон, если Клиент не назвал другой.\nconst d = $json.data;\nconst words = (d.name || '').trim().split(/\\s+/).filter(Boolean);\nconst phone = (d.phone || (d.channel === 'whatsapp' ? `+${d.sender_id}` : '')).replace(/[\\s().-]/g, '');\nconst vehicle = [d.vehicle_brand, d.vehicle_model].filter(Boolean).join(' ');\nreturn {\n  json: {\n    person: {\n      firstName: words.slice(0, -1).join(' ') || null,\n      lastName: words.at(-1) || `${d.channel} · ${d.sender_id}`,\n      ...(/^\\+[0-9]{8,15}$/.test(phone) ? { phoneNumber: phone } : {}),\n    },\n    vehicle: vehicle ? { name: vehicle, brand: d.vehicle_brand, model: d.vehicle_model } : null,\n    lead: { channel: d.channel, service: d.service, description: d.description, desiredTime: d.desired_date },\n  },\n};"
       },
       "id": "c7d2a1e0-0022-4000-8000-000000000002",
       "name": "CRM lead fields",
@@ -1698,7 +1698,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contactsIds: [$('Client').item.json.contact_id], parentType: 'Lead', parentId: $('CRM operation').item.json.data.crm_lead_id || $('Create lead').item.json.id, ...($('Lead vehicle').item.json.vehicle_id ? { vehicleId: $('Lead vehicle').item.json.vehicle_id } : {}) }) }}",
+        "jsonBody": "={{ JSON.stringify({ channel: $('CRM operation').item.json.data.channel, contactsIds: [$('Client').item.json.contact_id], parentType: 'Lead', parentId: $('CRM operation').item.json.data.crm_lead_id || $('Create lead').item.json.id, ...($('Lead vehicle').item.json.vehicle_id ? { vehicleId: $('Lead vehicle').item.json.vehicle_id } : {}) }) }}",
         "options": {
           "timeout": 10000
         }
@@ -1714,6 +1714,102 @@
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c34rep",
+              "leftValue": "={{ $json.operation === 'report' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e0-0034-4000-8000-000000000001",
+      "name": "Report?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        3600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Отчёт владельцу: сколько Заявок (Lead) и Записей (Meeting) создано в периоде [from, to) — всего\n// и в каждом Канале. Один запрос — одно число (total при maxSize 1): читать сами записи не нужно.\n// channel null — все записи периода, с Каналом и без (заведённые сотрудником без Канала).\nconst CHANNELS = ['messenger', 'instagram', 'whatsapp', 'call'];\nconst { from, to } = $('CRM operation').first().json.data;\nreturn ['Lead', 'Meeting'].flatMap((entity) =>\n  [null, ...CHANNELS].map((channel) => ({ json: { entity, channel, from, to } })),\n);"
+      },
+      "id": "c7d2a1e0-0034-4000-8000-000000000002",
+      "name": "Report queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        3500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/{{ $json.entity }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'greaterThanOrEquals', attribute: 'createdAt', value: $json.from }, { type: 'lessThan', attribute: 'createdAt', value: $json.to }, ...($json.channel ? [{ type: 'equals', attribute: 'channel', value: $json.channel }] : []) ], select: ['id'], maxSize: 1 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c7d2a1e0-0034-4000-8000-000000000003",
+      "name": "Count records",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        3500
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ответы «Count records» идут в порядке запросов «Report queries».\nconst queries = $('Report queries').all().map((item) => item.json);\nconst totals = $input.all().map((item) => item.json.total);\nconst channels = {};\nlet total;\nqueries.forEach(({ entity, channel }, i) => {\n  const key = entity === 'Lead' ? 'leads' : 'appointments';\n  const counts = channel ? (channels[channel] ??= {}) : (total ??= {});\n  counts[key] = totals[i];\n});\nreturn { json: { channels, total } };"
+      },
+      "id": "c7d2a1e0-0034-4000-8000-000000000004",
+      "name": "Report counts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        3500
+      ]
     }
   ],
   "connections": {
@@ -2259,7 +2355,7 @@
         ],
         [
           {
-            "node": "Unknown operation",
+            "node": "Report?",
             "type": "main",
             "index": 0
           }
@@ -2329,6 +2425,46 @@
         [
           {
             "node": "Lead recorded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report?": {
+      "main": [
+        [
+          {
+            "node": "Report queries",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report queries": {
+      "main": [
+        [
+          {
+            "node": "Count records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count records": {
+      "main": [
+        [
+          {
+            "node": "Report counts",
             "type": "main",
             "index": 0
           }
