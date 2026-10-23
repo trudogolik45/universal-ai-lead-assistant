@@ -12,8 +12,9 @@ from scripts.espocrm import EspoCrm
 from scripts.espocrm_bootstrap import API_USER, ensure_api_user
 from scripts.espocrm_knowledge import DEMO_CALENDAR, seed_calendar, seed_knowledge
 from tests.booking import WORKING_CALENDAR_NODE, WORKING_RANGES_NODE, adapter_query, busy_where
+from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET
 from tests.knowledge import assistant_knowledge_query
-from tests.polling import eventually
+from tests.polling import eventually, stays
 
 
 def create_conversation(espocrm, sender_id: str) -> dict:
@@ -488,3 +489,39 @@ def test_demo_working_calendar_is_seeded_once_and_keeps_owner_edits(espocrm):
         "Europe/Warsaw", [["8:00", "18:00"]], False, True, False
     )
     assert read["weekday6TimeRanges"] == [["9:00", "14:00"]]
+
+
+def employee_replies(fake) -> list:
+    return fake.requests(EMPLOYEE_REPLY_PATH)
+
+
+def test_employee_message_in_conversation_calls_n8n_with_text_and_client_address(espocrm, fake):
+    conversation = create_conversation(espocrm, "psid-400")
+    user = employee(espocrm, "Administratorzy")
+    as_employee = EspoCrm(espocrm.url, admin=(user["userName"], EMPLOYEE_PASSWORD))
+
+    # Сотрудник пишет из Беседы: направление и автора не выбирает.
+    message = as_employee.create("Message", {"conversationId": conversation["id"], "text": "Auto gotowe do odbioru."})
+
+    [call] = eventually(lambda: employee_replies(fake))
+    assert call.method == "POST"
+    assert call.headers["X-Uala-Secret"] == EMPLOYEE_REPLY_SECRET
+    assert call.json() == {
+        "crm_message_id": message["id"],
+        "channel": "messenger",
+        "sender_id": "psid-400",
+        "text": "Auto gotowe do odbioru.",
+    }
+    saved = espocrm.admin.read("Message", message["id"])
+    assert (saved["direction"], saved["author"], bool(saved["sentAt"])) == ("out", "employee", True)
+
+
+def test_messages_written_by_n8n_do_not_call_n8n_back(espocrm, fake):
+    conversation = create_conversation(espocrm, "psid-410")
+
+    espocrm.api.create(
+        "Message",
+        {"conversationId": conversation["id"], "direction": "out", "author": "assistant", "text": "Wymiana oleju — 150 zł."},
+    )
+
+    stays(lambda: employee_replies(fake) == [])

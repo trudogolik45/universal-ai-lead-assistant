@@ -95,7 +95,7 @@ def test_unknown_enum_value_is_rejected(db, table, column, bad_value):
 @pytest.mark.parametrize("language", ["de", "uk", "fr", "cs"])
 def test_european_language_is_accepted_for_company_and_conversation(db, language):
     company = create_company(db)
-    conversation = open_conversation(db, company)
+    open_conversation(db, company)
 
     db.execute("update companies set default_language = %s", (language,))
     db.execute("update conversations set language = %s", (language,))

@@ -69,6 +69,9 @@ services:
       ESPOCRM_CONFIG_WEB_SOCKET_URL: wss://${ESPOCRM_DOMAIN}/ws
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: tcp://*:7777
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: tcp://espocrm-websocket:7777
+      # Ответ сотрудника: хук модуля Uala зовёт n8n по compose-сети.
+      ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_URL: http://n8n:5678/webhook/employee-reply
+      ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_SECRET: ${EMPLOYEE_REPLY_SECRET:?EMPLOYEE_REPLY_SECRET не задан}
     ports:
       - "127.0.0.1:8080:80"
     volumes:

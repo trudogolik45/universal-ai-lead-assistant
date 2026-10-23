@@ -21,6 +21,7 @@ STAND_SECRETS = [
     "test-telegram-webhook-secret",
     "test-retry-secret",
     "test-espocrm-key",
+    "test-employee-reply-secret",
     "postgresql://test:test@",
 ]
 
