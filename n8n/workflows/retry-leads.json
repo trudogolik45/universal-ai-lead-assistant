@@ -416,6 +416,72 @@
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c7d2a1e3-0000-4000-8000-000000000001",
+      "name": "Find messages not in CRM",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        1100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Сообщения, не дошедшие до CRM (CRM лежала, сбой n8n): попытка старше 5 минут.\n-- По порядку Беседы: Сообщения ложатся в CRM в том же порядке.\nselect id as message_id from messages\nwhere crm_message_id is null and crm_claimed_at < now() - interval '5 minutes'\norder by created_at\nlimit 200",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e3-0000-4000-8000-000000000002",
+      "name": "Write message to CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        1100
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmWriteMsg",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.message_id }}"
+          },
+          "matchingColumns": [
+            "message_id"
+          ],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -492,6 +558,11 @@
             "node": "Claim stale inbox",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Find messages not in CRM",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -539,6 +610,17 @@
         [
           {
             "node": "Process message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find messages not in CRM": {
+      "main": [
+        [
+          {
+            "node": "Write message to CRM",
             "type": "main",
             "index": 0
           }

@@ -296,7 +296,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Заявка: поля и статус (qualified назад не откатывается, кроме Передачи человеку), язык Беседы,\n-- исходящее Сообщение (только auto). Передача человеку: Беседа handoff, handoff_sent_at сброшен —\n-- сводка уходит на каждую передачу; «Новая заявка» (telegram_sent_at) от неё не зависит.\nwith input as (select $2::jsonb as d),\nbefore as (select status from leads where conversation_id = $1::uuid),\nlead as (\n  update leads l set\n    name = d->'lead_data'->>'name',\n    contact = d->'lead_data'->>'contact',\n    service = d->'lead_data'->>'service',\n    description = d->'lead_data'->>'description',\n    desired_date = d->'lead_data'->>'desired_date',\n    intent = d->>'intent',\n    missing_fields = array(select jsonb_array_elements_text(d->'missing_fields')),\n    handoff_reason = d->>'handoff_reason',\n    status = case when d->>'lead_status' = 'needs_human' or l.status <> 'qualified' then d->>'lead_status'\n      else l.status end,\n    handoff_sent_at = case when d->>'lead_status' = 'needs_human' then null else l.handoff_sent_at end\n  from input\n  where l.conversation_id = $1::uuid\n  returning l.id, l.company_id, l.status\n),\nconversation as (\n  update conversations set language = d->>'language',\n    status = case when d->>'lead_status' = 'needs_human' then 'handoff' else status end\n  from input\n  where id = $1::uuid\n  returning id, channel, sender_id\n),\ncompany as (\n  select co.reply_mode from companies co join lead on lead.company_id = co.id\n),\nmessage as (\n  insert into messages (company_id, conversation_id, direction, text)\n  select lead.company_id, $1::uuid, 'out', d->>'reply'\n  from lead, input, company\n  where company.reply_mode = 'auto'\n)\nselect\n  lead.id as lead_id, lead.company_id, conversation.id as conversation_id,\n  conversation.channel, conversation.sender_id, company.reply_mode,\n  lead.status as lead_status,\n  before.status <> 'qualified' and lead.status = 'qualified' as became_qualified,\n  d->>'reply' as reply, d->>'language' as language, d->>'intent' as intent,\n  (d->>'needs_human')::boolean as needs_human, d->>'handoff_reason' as handoff_reason\nfrom lead, before, conversation, company, input",
+        "query": "-- Заявка: поля и статус (qualified назад не откатывается, кроме Передачи человеку), язык Беседы,\n-- исходящее Сообщение (только auto). Передача человеку: Беседа handoff, handoff_sent_at сброшен —\n-- сводка уходит на каждую передачу; «Новая заявка» (telegram_sent_at) от неё не зависит.\nwith input as (select $2::jsonb as d),\nbefore as (select status from leads where conversation_id = $1::uuid),\nlead as (\n  update leads l set\n    name = d->'lead_data'->>'name',\n    contact = d->'lead_data'->>'contact',\n    service = d->'lead_data'->>'service',\n    description = d->'lead_data'->>'description',\n    desired_date = d->'lead_data'->>'desired_date',\n    intent = d->>'intent',\n    missing_fields = array(select jsonb_array_elements_text(d->'missing_fields')),\n    handoff_reason = d->>'handoff_reason',\n    status = case when d->>'lead_status' = 'needs_human' or l.status <> 'qualified' then d->>'lead_status'\n      else l.status end,\n    handoff_sent_at = case when d->>'lead_status' = 'needs_human' then null else l.handoff_sent_at end\n  from input\n  where l.conversation_id = $1::uuid\n  returning l.id, l.company_id, l.status\n),\nconversation as (\n  update conversations set language = d->>'language',\n    status = case when d->>'lead_status' = 'needs_human' then 'handoff' else status end\n  from input\n  where id = $1::uuid\n  returning id, channel, sender_id\n),\ncompany as (\n  select co.reply_mode from companies co join lead on lead.company_id = co.id\n),\nmessage as (\n  insert into messages (company_id, conversation_id, direction, text)\n  select lead.company_id, $1::uuid, 'out', d->>'reply'\n  from lead, input, company\n  where company.reply_mode = 'auto'\n  returning id\n)\nselect\n  lead.id as lead_id, lead.company_id, conversation.id as conversation_id,\n  conversation.channel, conversation.sender_id, company.reply_mode,\n  lead.status as lead_status,\n  before.status <> 'qualified' and lead.status = 'qualified' as became_qualified,\n  d->>'reply' as reply, d->>'language' as language, d->>'intent' as intent,\n  (d->>'needs_human')::boolean as needs_human, d->>'handoff_reason' as handoff_reason,\n  (select id from message) as reply_message_id\nfrom lead, before, conversation, company, input",
         "options": {
           "queryReplacement": "={{ [$json.conversation_id, JSON.stringify($json)] }}"
         }
@@ -630,6 +630,94 @@
           "waitForSubWorkflow": true
         }
       }
+    },
+    {
+      "id": "c7d2a1e2-0000-4000-8000-000000000001",
+      "name": "Write incoming to CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmWriteMsg",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.message_id }}"
+          },
+          "matchingColumns": [
+            "message_id"
+          ],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e2-0000-4000-8000-000000000002",
+      "name": "Write reply to CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3080,
+        -100
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmWriteMsg",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.reply_message_id }}"
+          },
+          "matchingColumns": [
+            "message_id"
+          ],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
     }
   ],
   "connections": {
@@ -647,6 +735,11 @@
     "Save incoming message": {
       "main": [
         [
+          {
+            "node": "Write incoming to CRM",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Conversation open",
             "type": "main",
@@ -739,6 +832,11 @@
     "Save assistant reply": {
       "main": [
         [
+          {
+            "node": "Write reply to CRM",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Reply mode auto",
             "type": "main",

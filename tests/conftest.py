@@ -4,6 +4,7 @@ import psycopg
 import pytest
 
 from scripts.migrate import migrate
+from tests.fake_espocrm import FakeEspoCrm
 from tests.fake_server import FakeServer
 from tests.google import ServiceAccount
 from tests.stand import Stand, docker_available
@@ -46,8 +47,9 @@ def espocrm(stand):
 
 
 @pytest.fixture(scope="session")
-def fake_server():
+def fake_server(fake_espocrm):
     server = FakeServer().start()
+    server.mount(FakeEspoCrm.PREFIX, fake_espocrm)
     yield server
     server.stop()
 
@@ -59,6 +61,17 @@ def fake(fake_server):
     fake_server.reset()
     yield fake_server
     fake_server.reset()
+
+
+@pytest.fixture(scope="session")
+def fake_espocrm():
+    return FakeEspoCrm()
+
+
+@pytest.fixture
+def crm(fake, fake_espocrm):
+    """Фейковая EspoCRM (tests/fake_espocrm.py), пустая к началу теста: что записал n8n."""
+    return fake_espocrm
 
 
 @pytest.fixture(scope="session")

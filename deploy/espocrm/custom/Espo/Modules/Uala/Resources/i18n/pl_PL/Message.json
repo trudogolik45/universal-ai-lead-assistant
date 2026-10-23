@@ -4,7 +4,8 @@
         "direction": "Kierunek",
         "author": "Autor",
         "text": "Treść",
-        "providerMessageId": "ID wiadomości w kanale"
+        "providerMessageId": "ID wiadomości w kanale",
+        "sentAt": "Wysłano"
     },
     "links": {
         "conversation": "Rozmowa"
@@ -22,5 +23,8 @@
     },
     "labels": {
         "Create Message": "Utwórz wiadomość"
+    },
+    "tooltips": {
+        "sentAt": "Kiedy wiadomość napisano w kanale. Według tego czasu rozmowa jest uporządkowana."
     }
 }
