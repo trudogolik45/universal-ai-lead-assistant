@@ -24,15 +24,16 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 |---|---|---|
 | `meta-webhook` | `POST /webhook/meta` | Подпись Meta → сообщения в буфер входящих (`inbox`, дубль по id сообщения отсекается) → 200 Meta → `process-inbox` |
 | `process-inbox` | вызов из других workflow | Сообщение из буфера через `handle-message`; дошло до конца — помечается обработанным, упало — остаётся в буфере |
-| `handle-message` | вызов из других workflow | Заказчик по странице → Сообщение в Беседу → База знаний из EspoCRM → OpenRouter → ответ Клиенту, Заявка, Передача человеку; входящее и ответ — в CRM через `write-message-to-crm`, Заявка — через `write-lead-to-crm` |
+| `handle-message` | вызов из других workflow | Заказчик по странице → Сообщение в Беседу → База знаний из EspoCRM → OpenRouter → ответ Клиенту, Заявка, Передача человеку; входящее и ответ — в CRM через `write-message-to-crm`, Заявка — через `write-lead-to-crm`, Задача человеку — через `create-handoff-task` |
 | `write-message-to-crm` | вызов из других workflow | Сообщение из Postgres в Беседу Клиента в CRM через переходник; не вышло — остаётся недописанным (`messages.crm_message_id` пуст) для retry |
 | `write-lead-to-crm` | вызов из других workflow | Заявка из Postgres в CRM с Клиентом и Автомобилем через переходник; не вышло или Заявка изменилась во время записи — её дописывает retry (`crm_leads`) |
-| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операция `record_message`: найти или создать Беседу по Каналу и id Клиента, добавить Сообщение. Операция `record_lead`: Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить |
+| `create-handoff-task` | вызов из других workflow | Передача человеку → Задача человеку в CRM через переходник: сводка на польском, ссылка на Беседу; не вышло — остаётся без задачи (`leads.handoff_task_id` пуст) для retry |
+| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операции: `record_message` — найти или создать Беседу по Каналу и id Клиента, добавить Сообщение; `create_task` — Задача человеку (Task) к Беседе: вид → команда (`handoff` → `Administratorzy`), в команде — активный сотрудник с наименьшим числом открытых задач; `record_lead` — Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить |
 | `deliver-lead` | вызов из других workflow | Заявка в Google-таблицу, затем в CRM-webhook |
 | `notify-lead` | вызов из других workflow | Уведомление о Заявке или Передаче человеку в группу Telegram |
 | `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram |
 | `telegram-callback` | `POST /webhook/telegram` | Кнопки «Вернуть ассистенту» и «Закрыть»; возврат с полной Заявкой доставляет и объявляет её |
-| `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Повтор необработанных сообщений буфера, дозапись Сообщений и Заявок в CRM, недоставленных Заявок и алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
+| `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Повтор необработанных сообщений буфера, дозапись Сообщений, Заявок и Задач человеку в CRM, недоставленных Заявок и алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
 
 Рядом работает EspoCRM на своём Postgres (`deploy/espocrm`, ADR 0001 и 0002). В её модуле Uala
 есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`), Автомобиль (`Vehicle`)
@@ -127,7 +128,9 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
    ```
    Скрипт `scripts/espocrm_bootstrap.py` работает на VPS в контейнере uv. Под admin он создаёт
    роль и API-пользователя `n8n`, пишет его ключ в `ESPOCRM_API_KEY` в `~/uala/.env` и
-   пересоздаёт n8n. Ключ не покидает VPS.
+   пересоздаёт n8n. Ключ не покидает VPS. Ещё он заводит группы сотрудников — команды
+   `Administratorzy` и `Mechanicy` с ролью `Pracownicy`. Сотрудников в них добавляет Заказчик
+   (Administration → Teams): Задача человеку достаётся только активному члену команды.
    Демо-База знаний AutoPro Service в EspoCRM (повтор безопасен, правки Заказчика не затирает):
    ```
    make espocrm-knowledge
@@ -179,6 +182,11 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
 WebSocket включён (`ESPOCRM_CONFIG_USE_WEB_SOCKET`). Сервер — контейнер `espocrm-websocket`,
 браузер ходит на `wss://crm.n3spark.io/ws`. Cron EspoCRM (уведомления, письма) работает в
 `espocrm-daemon`.
+
+О назначенной Задаче человеку сотрудник узнаёт из уведомления CRM и письма. Письмо EspoCRM
+шлёт сама (Task по умолчанию в Administration → Notifications → «Email notifications upon
+assignment»), но только с SMTP (Administration → Outbound Emails) и адресом у сотрудника.
+В репо и `.env.example` SMTP не задан: его вводит Заказчик в админке.
 
 ### Meta
 

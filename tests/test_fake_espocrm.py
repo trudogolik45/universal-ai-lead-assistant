@@ -120,15 +120,6 @@ def test_unavailable_crm_answers_503_and_keeps_no_records(api, crm):
     assert crm.records("Conversation") == []
 
 
-def test_crm_unavailable_for_one_entity_answers_others(api, crm):
-    with crm.unavailable("Lead"):
-        lead = api.post("Lead", json={"lastName": "Kowalski"})
-        contact = api.post("Contact", json={"lastName": "Kowalski"})
-
-    assert (lead.status_code, contact.status_code) == (503, 200)
-    assert crm.records("Lead") == []
-
-
 def test_phone_without_country_code_is_rejected_like_real_crm(api, crm):
     local = api.post("Lead", json={"lastName": "Kowalski", "phoneNumber": "600123456"})
     international = api.post("Lead", json={"lastName": "Kowalski", "phoneNumber": "+48600123456"})
@@ -148,3 +139,40 @@ def test_reset_of_server_forgets_records(server, api, crm):
     server.reset()
 
     assert crm.records("Conversation") == []
+
+
+def test_search_filters_by_value_in_list(api, crm):
+    for status in ("Not Started", "Started", "Completed"):
+        crm.add("Task", {"name": status, "status": status})
+
+    found = search(api, "Task", [{"type": "in", "attribute": "status", "value": ["Not Started", "Started"]}]).json()
+
+    assert sorted(t["name"] for t in found["list"]) == ["Not Started", "Started"]
+
+
+def test_search_finds_users_linked_with_team(api, crm):
+    team = crm.add("Team", {"name": "Administratorzy"})
+    crm.add("User", {"userName": "anna", "teamsIds": [team["id"]]})
+    crm.add("User", {"userName": "marek", "teamsIds": []})
+
+    found = search(api, "User", [{"type": "linkedWith", "attribute": "teams", "value": [team["id"]]}]).json()
+
+    assert [u["userName"] for u in found["list"]] == ["anna"]
+
+
+def test_search_total_counts_all_matches_beyond_max_size(api, crm):
+    for name in ("a", "b", "c"):
+        crm.add("Task", {"name": name, "status": "Started"})
+
+    found = search(api, "Task", [{"type": "equals", "attribute": "status", "value": "Started"}], maxSize=1).json()
+
+    assert (found["total"], len(found["list"])) == (3, 1)
+
+
+def test_unavailable_entity_answers_503_while_others_work(api, crm):
+    with crm.unavailable("Task"):
+        failed = api.post("Task", json={"name": "Oddzwonić"})
+        created = api.post("Conversation", json=conversation("messenger", "psid-8"))
+
+    assert (failed.status_code, created.status_code) == (503, 200)
+    assert crm.records("Task") == []

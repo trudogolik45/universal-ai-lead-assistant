@@ -242,6 +242,398 @@
       }
     },
     {
+      "id": "c7d2a1e0-0000-4000-8000-000000000101",
+      "name": "Create task?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        700
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c101",
+              "leftValue": "={{ $json.operation === 'create_task' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000102",
+      "name": "Task team",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        600
+      ],
+      "parameters": {
+        "jsCode": "// Задача человеку: вид → группа (команда EspoCRM). Команды заводит scripts/espocrm_bootstrap.py,\n// сотрудников в них добавляет Заказчик в админке CRM.\nconst TEAM_BY_KIND = { handoff: 'Administratorzy' };\nconst kind = $('CRM operation').first().json.data.kind;\nif (!TEAM_BY_KIND[kind]) {\n  throw new Error(`Переходник CRM не знает вид Задачи человеку ${kind}`);\n}\nreturn [{ json: { team: TEAM_BY_KIND[kind] } }];"
+      }
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000103",
+      "name": "Find team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        600
+      ],
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Team",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'equals', attribute: 'name', value: $json.team } ], select: ['id'], maxSize: 1 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000104",
+      "name": "Team found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c104",
+              "leftValue": "={{ $json.total > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000105",
+      "name": "Unknown team",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        800
+      ],
+      "parameters": {
+        "errorMessage": "={{ 'В CRM нет команды ' + $('Task team').first().json.team }}"
+      }
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000106",
+      "name": "Find team members",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        600
+      ],
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/User",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'linkedWith', attribute: 'teams', value: [$json.list[0].id] }, { type: 'equals', attribute: 'isActive', value: true } ], select: ['id', 'userName'], orderBy: 'userName', order: 'asc', maxSize: 200 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000107",
+      "name": "Team members",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        600
+      ],
+      "parameters": {
+        "jsCode": "// Активные сотрудники группы по одному на элемент; пустая группа — один элемент без сотрудника:\n// задача уйдёт группе без исполнителя.\nconst members = $input.first().json.list.map((user) => ({ json: { user_id: user.id } }));\nreturn members.length ? members : [{ json: { user_id: null } }];"
+      }
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000108",
+      "name": "Count open tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        600
+      ],
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Task",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'equals', attribute: 'assignedUserId', value: $json.user_id }, { type: 'in', attribute: 'status', value: ['Not Started', 'Started'] } ], select: ['id'], maxSize: 1 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000109",
+      "name": "Least busy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        600
+      ],
+      "parameters": {
+        "jsCode": "// Наименее загруженный: меньше всего открытых задач; при равенстве — первый по имени пользователя.\nconst members = $('Team members').all();\nconst loads = $input.all().map((item) => item.json.total);\nconst index = loads.indexOf(Math.min(...loads));\nreturn [{ json: { assigned_user_id: members[index].json.user_id } }];"
+      }
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000110",
+      "name": "Find task conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        600
+      ],
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Conversation",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'equals', attribute: 'channel', value: $('CRM operation').first().json.data.channel }, { type: 'equals', attribute: 'senderId', value: $('CRM operation').first().json.data.sender_id } ], select: ['id'], maxSize: 1 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000111",
+      "name": "Task conversation exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c111",
+              "leftValue": "={{ $json.total > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000112",
+      "name": "Create task conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        700
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Conversation",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('CRM operation').first().json.data.channel + ' · ' + $('CRM operation').first().json.data.sender_id, channel: $('CRM operation').first().json.data.channel, senderId: $('CRM operation').first().json.data.sender_id }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000113",
+      "name": "Create task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Task",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('CRM operation').first().json.data.name, description: $('CRM operation').first().json.data.description, status: 'Not Started', parentType: 'Conversation', parentId: $json.list ? $json.list[0].id : $json.id, assignedUserId: $('Least busy').first().json.assigned_user_id, teamsIds: [$('Find team').first().json.list[0].id] }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c7d2a1e0-0000-4000-8000-000000000114",
+      "name": "Task created",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3080,
+        600
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a101",
+              "name": "crm_task_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "a102",
+              "name": "assigned_user_id",
+              "value": "={{ $json.assignedUserId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
       "parameters": {
         "conditions": {
           "options": {
@@ -271,7 +663,7 @@
       "typeVersion": 2.2,
       "position": [
         440,
-        700
+        1600
       ]
     },
     {
@@ -285,7 +677,7 @@
       "typeVersion": 2,
       "position": [
         660,
-        700
+        1600
       ]
     },
     {
@@ -319,7 +711,7 @@
       "typeVersion": 4.2,
       "position": [
         880,
-        700
+        1600
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -355,7 +747,7 @@
       "typeVersion": 2.2,
       "position": [
         1100,
-        700
+        1600
       ]
     },
     {
@@ -368,7 +760,7 @@
       "typeVersion": 1,
       "position": [
         1320,
-        900
+        1800
       ]
     },
     {
@@ -401,7 +793,7 @@
       "typeVersion": 2.2,
       "position": [
         1320,
-        700
+        1600
       ]
     },
     {
@@ -434,7 +826,7 @@
       "typeVersion": 4.2,
       "position": [
         1540,
-        600
+        1500
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -470,7 +862,7 @@
       "typeVersion": 4.2,
       "position": [
         1540,
-        800
+        1700
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -502,7 +894,7 @@
       "typeVersion": 4.2,
       "position": [
         1760,
-        800
+        1700
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -534,7 +926,7 @@
       "typeVersion": 3.4,
       "position": [
         1980,
-        700
+        1600
       ]
     },
     {
@@ -567,7 +959,7 @@
       "typeVersion": 2.2,
       "position": [
         2200,
-        700
+        1600
       ]
     },
     {
@@ -600,7 +992,7 @@
       "typeVersion": 2.2,
       "position": [
         2420,
-        600
+        1500
       ]
     },
     {
@@ -629,7 +1021,7 @@
       "typeVersion": 4.2,
       "position": [
         2640,
-        500
+        1400
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -661,7 +1053,7 @@
       "typeVersion": 4.2,
       "position": [
         2640,
-        700
+        1600
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -687,7 +1079,7 @@
       "typeVersion": 3.4,
       "position": [
         2860,
-        700
+        1600
       ]
     },
     {
@@ -720,7 +1112,7 @@
       "typeVersion": 2.2,
       "position": [
         3080,
-        700
+        1600
       ]
     },
     {
@@ -753,7 +1145,7 @@
       "typeVersion": 4.2,
       "position": [
         3300,
-        600
+        1500
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -789,7 +1181,7 @@
       "typeVersion": 4.2,
       "position": [
         3300,
-        800
+        1700
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -827,7 +1219,7 @@
       "typeVersion": 3.4,
       "position": [
         3520,
-        700
+        1600
       ]
     }
   ],
@@ -854,7 +1246,7 @@
         ],
         [
           {
-            "node": "Record lead?",
+            "node": "Create task?",
             "type": "main",
             "index": 0
           }
@@ -906,6 +1298,159 @@
         [
           {
             "node": "Message recorded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create task?": {
+      "main": [
+        [
+          {
+            "node": "Task team",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task team": {
+      "main": [
+        [
+          {
+            "node": "Find team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find team": {
+      "main": [
+        [
+          {
+            "node": "Team found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Team found": {
+      "main": [
+        [
+          {
+            "node": "Find team members",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find team members": {
+      "main": [
+        [
+          {
+            "node": "Team members",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Team members": {
+      "main": [
+        [
+          {
+            "node": "Count open tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count open tasks": {
+      "main": [
+        [
+          {
+            "node": "Least busy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Least busy": {
+      "main": [
+        [
+          {
+            "node": "Find task conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find task conversation": {
+      "main": [
+        [
+          {
+            "node": "Task conversation exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task conversation exists": {
+      "main": [
+        [
+          {
+            "node": "Create task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create task conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create task conversation": {
+      "main": [
+        [
+          {
+            "node": "Create task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create task": {
+      "main": [
+        [
+          {
+            "node": "Task created",
             "type": "main",
             "index": 0
           }

@@ -9,7 +9,8 @@
     "links": {
         "contact": "Klient",
         "messages": "Wiadomości",
-        "leads": "Zgłoszenia"
+        "leads": "Zgłoszenia",
+        "tasks": "Zadania"
     },
     "options": {
         "channel": {

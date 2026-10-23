@@ -9,7 +9,8 @@
     "links": {
         "contact": "Client",
         "messages": "Messages",
-        "leads": "Leads"
+        "leads": "Leads",
+        "tasks": "Tasks"
     },
     "options": {
         "channel": {

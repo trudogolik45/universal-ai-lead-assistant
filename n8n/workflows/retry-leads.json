@@ -484,6 +484,72 @@
       "onError": "continueRegularOutput"
     },
     {
+      "id": "e5f6a7b8-0000-4000-8000-000000000241",
+      "name": "Find handoffs without task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        1300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Передачи человеку без Задачи в CRM (CRM лежала, сбой n8n): попытка старше 5 минут.\nselect id as lead_id from leads\nwhere status = 'needs_human' and handoff_task_id is null\n  and handoff_task_claimed_at < now() - interval '5 minutes'\norder by created_at\nlimit 200",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "e5f6a7b8-0000-4000-8000-000000000242",
+      "name": "Create handoff task",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        1300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0handoffTask",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}"
+          },
+          "matchingColumns": [
+            "lead_id"
+          ],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
       "parameters": {
         "operation": "executeQuery",
         "query": "-- Заявки, не дописанные в CRM: запись упала (CRM лежала, сбой n8n) или Заявка изменилась во время записи.\n-- Взятые в работу меньше 5 минут назад ещё пишет основной поток. Заявку без попытки записи\n-- (Ассистент ещё не ответил) в CRM писать нечего.\nselect c.lead_id from crm_leads c\njoin leads l on l.id = c.lead_id\nwhere (c.written_at is null or c.written_at < l.updated_at)\n  and (c.claimed_at is null or c.claimed_at < now() - interval '5 minutes')\norder by l.updated_at\nlimit 200",
@@ -495,7 +561,7 @@
       "typeVersion": 2.6,
       "position": [
         660,
-        1300
+        1500
       ],
       "credentials": {
         "postgres": {
@@ -511,7 +577,7 @@
       "typeVersion": 1.2,
       "position": [
         880,
-        1300
+        1500
       ],
       "parameters": {
         "workflowId": {
@@ -631,6 +697,11 @@
             "index": 0
           },
           {
+            "node": "Find handoffs without task",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Find leads not in CRM",
             "type": "main",
             "index": 0
@@ -692,6 +763,17 @@
         [
           {
             "node": "Write message to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find handoffs without task": {
+      "main": [
+        [
+          {
+            "node": "Create handoff task",
             "type": "main",
             "index": 0
           }
