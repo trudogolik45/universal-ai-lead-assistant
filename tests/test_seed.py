@@ -59,6 +59,15 @@ def test_seed_binds_demo_whatsapp_number(db, database_url):
     assert demo == ("pnid-123",)
 
 
+def test_seed_binds_demo_instagram_account(db, database_url):
+    seed(database_url, demo_instagram_account_id="ig-123")
+
+    demo = db.execute(
+        "select instagram_account_id from companies where slug = %s", (DEMO_COMPANY_SLUG,)
+    ).fetchone()
+    assert demo == ("ig-123",)
+
+
 def test_reseed_keeps_bindings_and_owner_edits_of_mode(db, database_url):
     seed(database_url, demo_page_id="page-123")
     db.execute("update companies set reply_mode = 'silent' where slug = %s", (DEMO_COMPANY_SLUG,))

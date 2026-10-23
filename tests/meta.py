@@ -44,6 +44,28 @@ def messenger_payload(page_id: str, sender_id: str, text: str, mid: str | None =
     }
 
 
+def instagram_payload(account_id: str, igsid: str, text: str, mid: str | None = None) -> dict:
+    """Вебхук Instagram Direct с одним текстовым сообщением Клиента (IGSID) аккаунту account_id."""
+    return instagram_event(account_id, {"id": igsid}, {"id": account_id}, {"mid": mid or new_mid(), "text": text})
+
+
+def instagram_echo_payload(account_id: str, igsid: str, text: str) -> dict:
+    """Эхо Instagram: сообщение, которое отправил сам аккаунт Заказчика."""
+    return instagram_event(account_id, {"id": account_id}, {"id": igsid}, {"mid": new_mid(), "text": text, "is_echo": True})
+
+
+def instagram_event(account_id: str, sender: dict, recipient: dict, message: dict) -> dict:
+    now = int(time.time() * 1000)
+    return {
+        "object": "instagram",
+        "entry": [{
+            "id": account_id,
+            "time": now,
+            "messaging": [{"sender": sender, "recipient": recipient, "timestamp": now, "message": message}],
+        }],
+    }
+
+
 def new_wamid() -> str:
     return f"wamid.{uuid.uuid4().hex}"
 

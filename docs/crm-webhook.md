@@ -60,7 +60,7 @@ Workflow `deliver-lead` (`n8n/workflows/deliver-lead.json`) вызывается
 | `lead_id` | uuid | id Заявки (`leads.id`), ключ для дедупликации на стороне CRM |
 | `company_id` | uuid | Заказчик |
 | `conversation_id` | uuid | Беседа, из которой собрана Заявка |
-| `channel` | string | Канал: `messenger` (позже `whatsapp`, `instagram`) |
+| `channel` | string | Канал: `messenger`, `whatsapp` или `instagram` |
 | `status` | string | Статус Заявки на момент отправки, обычно `qualified` |
 | `name`, `contact`, `service`, `description` | string \| null | Данные Заявки; необязательные поля могут быть `null` |
 | `desired_date` | string \| null | Желаемая дата словами Клиента («piątek rano»), не нормализуется |

@@ -52,6 +52,7 @@ services:
       META_VERIFY_TOKEN: test-verify-token
       META_PAGE_ACCESS_TOKEN: test-page-token
       WHATSAPP_ACCESS_TOKEN: test-whatsapp-token
+      INSTAGRAM_ACCESS_TOKEN: test-instagram-token
       OPENROUTER_API_KEY: test-openrouter-key
       TELEGRAM_BOT_TOKEN: test-telegram-token
       TELEGRAM_WEBHOOK_SECRET: test-telegram-webhook-secret
