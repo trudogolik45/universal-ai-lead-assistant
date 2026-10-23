@@ -6,11 +6,11 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17-27-whatsapp`, команда `uv run pytest -rs`.
-- Результат: **159 passed, 1 failed, 1 skipped** за 1342 с (хост под нагрузкой, load average ~20–40).
-  Упал `test_meta_webhook.py::test_message_for_unknown_page_is_ignored`: запрос в OpenRouter
-  от предыдущего теста пришёл с опозданием, уже после сброса фейка. Повторный прогон
-  `test_meta_webhook.py` с этим тестом и его соседями: 3 passed.
+- Дата: 2026-10-23, ветка `spec-17-27-whatsapp` (после мержа #24), команда `uv run pytest -rs`.
+- Результат: **169 passed, 3 failed, 1 skipped** за 1931 с (хост под нагрузкой, load average ~15–40).
+  Упали `test_assistant_reply.py::test_reply_goes_out_in_client_language[en]`, `[ru]` (`httpx.ReadTimeout`
+  на вебхуке под нагрузкой) и `test_inbox.py::test_processed_message_is_not_answered_again_by_retry`
+  (запоздалый ответ предыдущего теста). Повтор `pytest --lf`: 3 passed.
 - Skipped: `tests/test_lead_delivery_google.py::test_qualified_lead_row_is_read_back_from_real_spreadsheet` —
   запись в настоящую Google-таблицу и чтение обратно. Нужны `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_SHEETS_TEST_SPREADSHEET_ID`; service account и
