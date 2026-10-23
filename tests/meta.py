@@ -44,6 +44,53 @@ def messenger_payload(page_id: str, sender_id: str, text: str, mid: str | None =
     }
 
 
+def new_wamid() -> str:
+    return f"wamid.{uuid.uuid4().hex}"
+
+
+def whatsapp_payload(phone_number_id: str, wa_id: str, text: str, wamid: str | None = None) -> dict:
+    """Вебхук WhatsApp Cloud API с одним текстовым сообщением Клиента на номер phone_number_id."""
+    return whatsapp_change(phone_number_id, {
+        "contacts": [{"profile": {"name": "Klient"}, "wa_id": wa_id}],
+        "messages": [{
+            "from": wa_id,
+            "id": wamid or new_wamid(),
+            "timestamp": str(int(time.time())),
+            "type": "text",
+            "text": {"body": text},
+        }],
+    })
+
+
+def whatsapp_status_payload(phone_number_id: str, wa_id: str) -> dict:
+    """Вебхук WhatsApp о доставке исходящего: сообщения Клиента в нём нет."""
+    return whatsapp_change(phone_number_id, {
+        "statuses": [{
+            "id": new_wamid(),
+            "recipient_id": wa_id,
+            "status": "delivered",
+            "timestamp": str(int(time.time())),
+        }],
+    })
+
+
+def whatsapp_change(phone_number_id: str, value: dict) -> dict:
+    return {
+        "object": "whatsapp_business_account",
+        "entry": [{
+            "id": "waba-1",
+            "changes": [{
+                "field": "messages",
+                "value": {
+                    "messaging_product": "whatsapp",
+                    "metadata": {"display_phone_number": "48500100200", "phone_number_id": phone_number_id},
+                    **value,
+                },
+            }],
+        }],
+    }
+
+
 class MetaClient:
     def __init__(self, n8n_url: str):
         self.url = n8n_url + WEBHOOK_PATH

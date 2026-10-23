@@ -50,6 +50,15 @@ def test_seed_binds_demo_page_and_delivery_channel(db, database_url):
     assert demo == ("page-123", "-100500", "sheet-1", "Leads")
 
 
+def test_seed_binds_demo_whatsapp_number(db, database_url):
+    seed(database_url, demo_whatsapp_phone_number_id="pnid-123")
+
+    demo = db.execute(
+        "select whatsapp_phone_number_id from companies where slug = %s", (DEMO_COMPANY_SLUG,)
+    ).fetchone()
+    assert demo == ("pnid-123",)
+
+
 def test_reseed_keeps_bindings_and_owner_edits_of_mode(db, database_url):
     seed(database_url, demo_page_id="page-123")
     db.execute("update companies set reply_mode = 'silent' where slug = %s", (DEMO_COMPANY_SLUG,))
