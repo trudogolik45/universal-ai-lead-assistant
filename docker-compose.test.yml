@@ -119,9 +119,11 @@ services:
       ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: tcp://*:7777
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: tcp://espocrm-websocket:7777
-      # Ответ сотрудника и закрытая Задача (хуки модуля Uala): контрактные тесты подставляют фейк-сервер.
+      # Ответ сотрудника, закрытая Задача и статус Заказ-наряда (хуки модуля Uala): контрактные тесты
+      # подставляют фейк-сервер.
       ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_URL: ${EMPLOYEE_REPLY_URL:-http://n8n:5678/webhook/employee-reply}
       ESPOCRM_CONFIG_UALA_TASK_DONE_URL: ${TASK_DONE_URL:-http://n8n:5678/webhook/task-done}
+      ESPOCRM_CONFIG_UALA_REPAIR_STATUS_URL: ${REPAIR_STATUS_URL:-http://n8n:5678/webhook/repair-status}
       ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_SECRET: test-employee-reply-secret
     volumes:
       - /var/www/html/data

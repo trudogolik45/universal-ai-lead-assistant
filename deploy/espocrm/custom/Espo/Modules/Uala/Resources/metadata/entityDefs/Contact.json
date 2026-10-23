@@ -22,6 +22,11 @@
             "type": "hasMany",
             "entity": "Lead",
             "foreign": "contact"
+        },
+        "repairOrders": {
+            "type": "hasMany",
+            "entity": "RepairOrder",
+            "foreign": "contact"
         }
     }
 }

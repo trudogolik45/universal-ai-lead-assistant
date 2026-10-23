@@ -94,6 +94,11 @@
             "type": "hasMany",
             "entity": "Meeting",
             "foreign": "vehicle"
+        },
+        "repairOrders": {
+            "type": "hasMany",
+            "entity": "RepairOrder",
+            "foreign": "vehicle"
         }
     },
     "collection": {

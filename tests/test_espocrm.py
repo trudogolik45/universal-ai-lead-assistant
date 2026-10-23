@@ -12,7 +12,7 @@ from scripts.espocrm import EspoCrm
 from scripts.espocrm_bootstrap import API_USER, ensure_api_user
 from scripts.espocrm_knowledge import DEMO_CALENDAR, seed_calendar, seed_knowledge
 from tests.booking import WORKING_CALENDAR_NODE, WORKING_RANGES_NODE, adapter_query, busy_where
-from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET, TASK_DONE_PATH
+from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET, REPAIR_STATUS_PATH, TASK_DONE_PATH
 from tests.knowledge import assistant_knowledge_query
 from tests.owner_report import report_where
 from tests.polling import eventually, stays
@@ -609,3 +609,83 @@ def test_task_still_open_or_without_conversation_does_not_call_n8n(espocrm, fake
     espocrm.admin.update("Task", other["id"], {"status": "Completed"})
 
     stays(lambda: done_tasks(fake) == [])
+
+
+def repair_order(espocrm, status: str = "New") -> tuple[dict, list[dict]]:
+    """Заказ-наряд Клиента, который писал в Messenger и WhatsApp; возвращает его и Беседы Клиента."""
+    client = espocrm.api.create("Contact", {"firstName": "Jan", "lastName": "Kowalski"})
+    conversations = [
+        {"channel": channel, "sender_id": f"{channel}-{uuid.uuid4().hex[:8]}"} for channel in ("messenger", "whatsapp")
+    ]
+    for c in conversations:
+        espocrm.api.create(
+            "Conversation",
+            {"name": f"Jan Kowalski · {c['channel']}", "channel": c["channel"], "senderId": c["sender_id"],
+             "contactId": client["id"]},
+        )
+    vehicle = espocrm.api.create("Vehicle", {"name": "Skoda Octavia", "contactId": client["id"]})
+    order = espocrm.admin.create(
+        "RepairOrder",
+        {"name": "Skoda Octavia: wymiana sprzęgła", "status": status, "contactId": client["id"],
+         "vehicleId": vehicle["id"]},
+    )
+    return order, conversations
+
+
+def repair_statuses(fake) -> list:
+    return fake.requests(REPAIR_STATUS_PATH)
+
+
+def test_repair_order_belongs_to_client_vehicle_and_appointment(espocrm):
+    client = espocrm.api.create("Contact", {"firstName": "Anna", "lastName": "Nowak"})
+    vehicle = espocrm.api.create("Vehicle", {"name": "Toyota Corolla", "contactId": client["id"]})
+    meeting = espocrm.api.create(
+        "Meeting", {"name": "Wizyta: Anna Nowak", "dateStart": "2031-05-06 09:00:00", "dateEnd": "2031-05-06 10:00:00"}
+    )
+    user = employee(espocrm, "Mechanicy")
+    as_mechanic = EspoCrm(espocrm.url, admin=(user["userName"], EMPLOYEE_PASSWORD))
+
+    order = as_mechanic.create(
+        "RepairOrder",
+        {"name": "Toyota Corolla: hamulce", "contactId": client["id"], "vehicleId": vehicle["id"],
+         "meetingId": meeting["id"]},
+    )
+
+    read = espocrm.api.read("RepairOrder", order["id"])
+    assert (read["status"], read["contactId"], read["vehicleId"], read["meetingId"]) == (
+        "New", client["id"], vehicle["id"], meeting["id"]
+    )
+    for entity, record in (("Contact", client), ("Vehicle", vehicle), ("Meeting", meeting)):
+        assert [o["id"] for o in espocrm.api.related(entity, record["id"], "repairOrders")] == [order["id"]]
+
+
+def test_repair_order_status_is_one_of_the_workshop_statuses(espocrm):
+    response = espocrm.admin.http.post("RepairOrder", json={"name": "Auto", "status": "Lost"})
+
+    assert response.status_code == 400
+
+
+def test_mechanic_changing_repair_status_calls_n8n_with_status_and_client_conversations(espocrm, fake):
+    order, conversations = repair_order(espocrm)
+    user = employee(espocrm, "Mechanicy")
+    as_mechanic = EspoCrm(espocrm.url, admin=(user["userName"], EMPLOYEE_PASSWORD))
+
+    as_mechanic.update("RepairOrder", order["id"], {"status": "Waiting for Parts"})
+
+    [call] = eventually(lambda: [
+        r for r in repair_statuses(fake)
+        if r.json()["crm_repair_order_id"] == order["id"] and r.json()["status"] == "Waiting for Parts"
+    ])
+    assert call.headers["X-Uala-Secret"] == EMPLOYEE_REPLY_SECRET
+    body = call.json()
+    assert sorted(body["conversations"], key=lambda c: c["channel"]) == conversations
+
+
+def test_repair_order_saved_without_status_change_does_not_call_n8n(espocrm, fake):
+    order, _ = repair_order(espocrm)
+    eventually(lambda: [r for r in repair_statuses(fake) if r.json()["crm_repair_order_id"] == order["id"]])
+    fake.reset()
+
+    espocrm.admin.update("RepairOrder", order["id"], {"description": "Klient prosi o telefon przed wymianą."})
+
+    stays(lambda: repair_statuses(fake) == [])

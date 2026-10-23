@@ -1,0 +1,30 @@
+{
+    "fields": {
+        "status": "Status",
+        "contact": "Klient",
+        "vehicle": "Pojazd",
+        "meeting": "Wizyta"
+    },
+    "links": {
+        "contact": "Klient",
+        "vehicle": "Pojazd",
+        "meeting": "Wizyta"
+    },
+    "options": {
+        "status": {
+            "New": "Nowe",
+            "Accepted": "Przyjęty do serwisu",
+            "Diagnostics": "Diagnostyka",
+            "Waiting for Parts": "Czeka na części",
+            "In Repair": "W naprawie",
+            "Ready": "Gotowy do odbioru",
+            "Closed": "Zamknięte"
+        }
+    },
+    "tooltips": {
+        "status": "Klient dostaje wiadomość (WhatsApp lub SMS) przy statusach: Przyjęty do serwisu, Czeka na części, Gotowy do odbioru. Pozostałe statusy są wewnętrzne."
+    },
+    "labels": {
+        "Create RepairOrder": "Utwórz zlecenie naprawy"
+    }
+}

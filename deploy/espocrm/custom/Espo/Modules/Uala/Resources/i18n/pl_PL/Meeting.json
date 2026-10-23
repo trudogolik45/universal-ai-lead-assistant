@@ -1,10 +1,12 @@
 {
     "fields": {
         "vehicle": "Pojazd",
-        "channel": "Kanał"
+        "channel": "Kanał",
+        "repairOrders": "Zlecenia naprawy"
     },
     "links": {
-        "vehicle": "Pojazd"
+        "vehicle": "Pojazd",
+        "repairOrders": "Zlecenia naprawy"
     },
     "options": {
         "channel": {

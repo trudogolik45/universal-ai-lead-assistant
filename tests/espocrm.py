@@ -10,6 +10,8 @@ ESPOCRM_ADMIN = ("admin", "test-espocrm-admin")
 EMPLOYEE_REPLY_PATH = "/n8n/webhook/employee-reply"
 # Куда хук EspoCRM шлёт закрытую Задачу человеку.
 TASK_DONE_PATH = "/n8n/webhook/task-done"
+# Куда хук EspoCRM шлёт смену статуса Заказ-наряда.
+REPAIR_STATUS_PATH = "/n8n/webhook/repair-status"
 # Секрет вебхуков хуков из docker-compose.test.yml: его же ждёт n8n.
 EMPLOYEE_REPLY_SECRET = "test-employee-reply-secret"
 

@@ -21,7 +21,7 @@ READ_ONLY = {"create": "no", "read": "all", "edit": "no", "delete": "no", "strea
 ROLE_ACL = {
     **{
         entity: RECORD_ACCESS
-        for entity in ("Contact", "Conversation", "Message", "Vehicle", "Lead", "Meeting", "Task")
+        for entity in ("Contact", "Conversation", "Message", "Vehicle", "Lead", "Meeting", "Task", "RepairOrder")
     },
     "KnowledgeItem": READ_ONLY,
     # Назначение Задачи человеку: n8n ищет сотрудников группы и их открытые задачи.
@@ -35,10 +35,13 @@ ROLE_ACL = {
 TEAMS = ("Administratorzy", "Mechanicy")
 STAFF_ROLE_NAME = "Pracownicy"
 # Роль групп: сотрудник видит Задачи человеку своей группы (без права чтения EspoCRM не шлёт ему
-# уведомление о назначенной задаче), Беседы и Клиентов и пишет в Беседу.
+# уведомление о назначенной задаче), Беседы и Клиентов, пишет в Беседу и ведёт Заказ-наряды.
 STAFF_ACL = {
     "Task": {"create": "yes", "read": "team", "edit": "team", "delete": "no", "stream": "team"},
-    **{entity: RECORD_ACCESS for entity in ("Contact", "Conversation", "Message", "Vehicle", "Lead", "Meeting")},
+    **{
+        entity: RECORD_ACCESS
+        for entity in ("Contact", "Conversation", "Message", "Vehicle", "Lead", "Meeting", "RepairOrder")
+    },
     "KnowledgeItem": READ_ONLY,
 }
 

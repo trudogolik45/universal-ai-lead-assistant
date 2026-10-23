@@ -7,12 +7,14 @@
         "vin": "VIN",
         "contact": "Klient",
         "leads": "Zgłoszenia",
-        "meetings": "Wizyty"
+        "meetings": "Wizyty",
+        "repairOrders": "Zlecenia naprawy"
     },
     "links": {
         "contact": "Klient",
         "leads": "Zgłoszenia",
-        "meetings": "Wizyty"
+        "meetings": "Wizyty",
+        "repairOrders": "Zlecenia naprawy"
     },
     "labels": {
         "Create Vehicle": "Dodaj pojazd"

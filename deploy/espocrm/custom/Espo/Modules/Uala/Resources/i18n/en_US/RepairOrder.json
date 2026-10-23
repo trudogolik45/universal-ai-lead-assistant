@@ -1,0 +1,30 @@
+{
+    "fields": {
+        "status": "Status",
+        "contact": "Client",
+        "vehicle": "Vehicle",
+        "meeting": "Appointment"
+    },
+    "links": {
+        "contact": "Client",
+        "vehicle": "Vehicle",
+        "meeting": "Appointment"
+    },
+    "options": {
+        "status": {
+            "New": "New",
+            "Accepted": "Accepted",
+            "Diagnostics": "Diagnostics",
+            "Waiting for Parts": "Waiting for parts",
+            "In Repair": "In repair",
+            "Ready": "Ready for collection",
+            "Closed": "Closed"
+        }
+    },
+    "tooltips": {
+        "status": "The client gets a message (WhatsApp or SMS) on: Accepted, Waiting for parts, Ready for collection. Other statuses are internal."
+    },
+    "labels": {
+        "Create RepairOrder": "Create Repair order"
+    }
+}

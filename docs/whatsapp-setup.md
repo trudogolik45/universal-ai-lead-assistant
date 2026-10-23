@@ -112,6 +112,20 @@ WhatsApp разрешает бизнесу писать свободным те�
 
 Клиенты из Messenger и Instagram получают напоминание по SMS (сервис SMSAPI), шаблон им не нужен.
 
+## Шаг 8. Шаблоны «статус ремонта»
+
+Когда мастер меняет статус Заказ-наряда в CRM, клиент узнаёт, что машину приняли, что ждём запчасти
+и что можно забирать. Создайте три шаблона, категория **Utility**, без переменных, языки **Polish**
+и **English** (`en`):
+
+| Название | Polish | English |
+|---|---|---|
+| `repair_accepted` | Dzień dobry! Przyjęliśmy Twój samochód do serwisu. Damy znać, gdy będzie gotowy. | Hello! We have received your car at our service. We will let you know when it is ready. |
+| `repair_waiting_for_parts` | Dzień dobry! Czekamy na części do Twojego samochodu. Damy znać, gdy będzie gotowy. | Hello! We are waiting for parts for your car. We will let you know when it is ready. |
+| `repair_ready` | Dzień dobry! Twój samochód jest gotowy do odbioru. Zapraszamy! | Hello! Your car is ready for collection. See you soon! |
+
+Дождитесь **Approved** у всех шести. Клиенты из Messenger и Instagram получают статус по SMS.
+
 ## Проверка
 
 Напишите на номер сервиса в WhatsApp с личного телефона. Ассистент должен ответить. Ответа нет —
@@ -126,6 +140,7 @@ WhatsApp разрешает бизнесу писать свободным те�
 | Номер в международном формате (ссылка для клиентов `wa.me/48XXXXXXXXX`) | Шаг 2 | — |
 | «Шаблон `news_update` одобрен на pl и en» | Шаг 6 | — |
 | «Шаблон `appointment_reminder` одобрен на pl и en» | Шаг 7 | — |
+| «Шаблоны `repair_accepted`, `repair_waiting_for_parts`, `repair_ready` одобрены на pl и en» | Шаг 8 | — |
 
 Токен даёт доступ к переписке вашего номера. Передавайте его так же, как токены Messenger
 (раздел «Что прислать разработчику» в [docs/meta-setup.md](meta-setup.md)): не в открытый чат и

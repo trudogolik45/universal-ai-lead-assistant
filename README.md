@@ -29,6 +29,7 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 | `write-message-to-crm` | вызов из других workflow | Сообщение из Postgres в Беседу Клиента в CRM через переходник; не вышло — остаётся недописанным (`messages.crm_message_id` пуст) для retry |
 | `write-lead-to-crm` | вызов из других workflow | Заявка из Postgres в CRM с Клиентом и Автомобилем через переходник; не вышло или Заявка изменилась во время записи — её дописывает retry (`crm_leads`) |
 | `employee-reply` | `POST /webhook/employee-reply` | Ответ сотрудника из EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа переходит в режим человека, Ассистент в ней молчит, текст — Клиенту через `send-to-client` |
+| `repair-status` | `POST /webhook/repair-status` | Мастер сменил статус Заказ-наряда в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): на «Przyjęty do serwisu», «Czeka na części», «Gotowy do odbioru» Клиенту уходит сообщение через `send-to-client` — шаблон WhatsApp или SMS; остальные статусы внутренние |
 | `task-done` | `POST /webhook/task-done` | Сотрудник закрыл Задачу «Передача человеку» в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа снова у Ассистента, Заявка `collecting` или `qualified` по обязательным полям |
 | `create-handoff-task` | вызов из других workflow | Передача человеку → Задача человеку в CRM через переходник: сводка на польском, ссылка на Беседу; не вышло — остаётся без задачи (`leads.handoff_task_id` пуст) для retry |
 | `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операции: `record_message` — найти или создать Беседу по Каналу и id Клиента, добавить Сообщение; `create_task` — Задача человеку (Task) к Беседе: вид → команда (`handoff` → `Administratorzy`), в команде — активный сотрудник с наименьшим числом открытых задач; `record_lead` — Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить, Запись Заявки — привязать к ним; `free_slots` — свободные слоты по рабочему календарю (`WorkingTimeCalendar`) и Записям (`Meeting`); `book_appointment` — Запись (`Meeting`) в слот, если он ещё свободен; `planned_appointments` — запланированные Записи с началом в ближайшие `hours` часов; `report` — сколько Заявок и Записей создано за период, всего и по Каналам |
@@ -38,8 +39,8 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 | `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Повтор необработанных сообщений буфера, дозапись Сообщений, Заявок и Задач человеку в CRM, недошедших алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
 
 Рядом работает EspoCRM на своём Postgres (`deploy/espocrm`, ADR 0001 и 0002). В её модуле Uala
-есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`), Автомобиль (`Vehicle`)
-и База знаний (`KnowledgeItem`) — её Ассистент читает на каждое Сообщение. Запись — встроенная
+есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`), Автомобиль (`Vehicle`),
+Заказ-наряд (`RepairOrder`, «Zlecenie naprawy») и База знаний (`KnowledgeItem`) — её Ассистент читает на каждое Сообщение. Запись — встроенная
 встреча `Meeting` со связью с Автомобилем; свободные слоты — по встроенному рабочему календарю
 (`WorkingTimeCalendar`), см. docs/knowledge-base.md.
 Заявка — встроенный `Lead` (по-польски «Zgłoszenie») со своими полями услуга (`service`), удобное время
@@ -224,6 +225,17 @@ WhatsApp отвечает через Cloud API номера (`WHATSAPP_ACCESS_TO
 Instagram Автоматизации после 24 часов не пускают, поэтому Клиенту оттуда уходит SMS через SMSAPI
 (`SMSAPI_TOKEN`, `SMSAPI_SENDER`) на телефон из Заявки, тоже на pl или en. Запустить сразу:
 `curl -X POST https://n8n.n3spark.io/webhook/reminders -H "X-Retry-Secret: $RETRY_WEBHOOK_SECRET"`.
+
+### Статус ремонта
+
+Заказ-наряд (`RepairOrder`) связан с Клиентом, Автомобилем и Записью. Мастер меняет его статус в
+EspoCRM, хук модуля Uala сразу зовёт `repair-status` с новым статусом и Беседами Клиента. Клиенту
+уходят три статуса: «Przyjęty do serwisu» (машину приняли), «Czeka na części» (ждём запчасти),
+«Gotowy do odbioru» (можно забирать). «Nowe», «Diagnostyka», «W naprawie», «Zamknięte» — внутренние.
+Сообщение идёт в Беседу, где Клиент писал последним: из WhatsApp — шаблоном `repair_accepted`,
+`repair_waiting_for_parts` или `repair_ready` (pl или en), из Messenger и Instagram — SMS через SMSAPI
+на телефон Заявки. Беседы Клиента нет — сообщать некуда. n8n недоступен в момент смены статуса —
+сообщение не уходит, повтора нет.
 
 ### Алерт «AI не отвечает»
 
