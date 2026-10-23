@@ -26,7 +26,9 @@ services:
     ports:
       - "127.0.0.1:${STAND_POSTGRES_PORT:-0}:5432"
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "test"]
+      # По TCP: на время initdb образ поднимает временный сервер только на unix-сокете,
+      # проверка через сокет зеленеет раньше, чем Postgres готов принимать соединения с хоста.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "test"]
       interval: 1s
       retries: 30
 
@@ -37,6 +39,9 @@ services:
       NODE_FUNCTION_ALLOW_BUILTIN: crypto
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
+      # Под нагрузкой (параллельные стенды) task runner стартует дольше 30 с по умолчанию,
+      # не подключается к брокеру, и Code-узлы падают по таймауту.
+      N8N_RUNNERS_GRANT_TOKEN_TTL: "300"
       GENERIC_TIMEZONE: Europe/Warsaw
       # Ключ фиксирован: стенд одноразовый, credentials тестовые.
       N8N_ENCRYPTION_KEY: test-stand-encryption-key

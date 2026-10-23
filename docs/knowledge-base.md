@@ -10,7 +10,7 @@ n8n и без правки workflow.
 
 ## Что уходит в промпт
 
-На каждое Сообщение workflow `meta-webhook` собирает:
+На каждое Сообщение workflow `handle-message` собирает:
 
 - `companies.name`, `default_language`, `handoff_rules`, `required_fields`, `ai_model`;
 - всю Базу знаний Заказчика (`kind`, `title`, `body`, `price`) — целиком, без поиска, порядок:

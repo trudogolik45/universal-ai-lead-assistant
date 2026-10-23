@@ -133,11 +133,11 @@ def wait_until(probe, what: str, timeout: float = 90):
 
 
 def wait_ready(url: str):
-    # Первый старт n8n — миграции его базы; рядом с другими стендами они идут дольше 90 с.
+    # Первый старт n8n — миграции его базы; рядом с другими стендами (load ~20) они шли до 4+ минут.
     wait_until(
         lambda: httpx.get(f"{url}/healthz/readiness", timeout=2).status_code == 200,
         f"n8n {url}",
-        timeout=300,
+        timeout=600,
     )
 
 

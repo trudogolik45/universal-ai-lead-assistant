@@ -33,7 +33,7 @@ def database_url(stand):
 @pytest.fixture
 def db(database_url):
     with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute("truncate companies cascade")
+        conn.execute("truncate companies, inbox cascade")
         yield conn
 
 
