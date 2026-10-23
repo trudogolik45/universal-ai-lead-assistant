@@ -4,7 +4,7 @@ import psycopg
 import pytest
 
 from scripts.migrate import migrate
-from tests import knowledge
+from tests.fake_espocrm import FakeEspoCrm
 from tests.fake_server import FakeServer
 from tests.google import ServiceAccount
 from tests.stand import Stand, docker_available
@@ -47,20 +47,31 @@ def espocrm(stand):
 
 
 @pytest.fixture(scope="session")
-def fake_server():
+def fake_server(fake_espocrm):
     server = FakeServer().start()
+    server.mount(FakeEspoCrm.PREFIX, fake_espocrm)
     yield server
     server.stop()
 
 
 @pytest.fixture
 def fake(fake_server):
-    """Фейк внешних API без записанных запросов; из ответов задана только пустая База знаний EspoCRM.
-    Сброс и после теста: заданные ответы не утекают в тесты, которые фейк не берут."""
+    """Фейк внешних API без заданных ответов и записанных запросов; фейковая EspoCRM пуста
+    (её База знаний — тоже). Сброс и после теста: заданные ответы не утекают в тесты, которые фейк не берут."""
     fake_server.reset()
-    knowledge.respond_with(fake_server, [])
     yield fake_server
     fake_server.reset()
+
+
+@pytest.fixture(scope="session")
+def fake_espocrm():
+    return FakeEspoCrm()
+
+
+@pytest.fixture
+def crm(fake, fake_espocrm):
+    """Фейковая EspoCRM (tests/fake_espocrm.py), пустая к началу теста: что записал n8n."""
+    return fake_espocrm
 
 
 @pytest.fixture(scope="session")

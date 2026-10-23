@@ -29,6 +29,10 @@
             "maxLength": 255,
             "readOnlyAfterCreate": true
         },
+        "sentAt": {
+            "type": "datetime",
+            "tooltip": true
+        },
         "createdAt": {
             "type": "datetime",
             "readOnly": true
@@ -64,12 +68,12 @@
         }
     },
     "collection": {
-        "orderBy": "createdAt",
+        "orderBy": "sentAt",
         "order": "asc"
     },
     "indexes": {
         "conversation": {
-            "columns": ["conversationId", "createdAt"]
+            "columns": ["conversationId", "sentAt"]
         },
         "providerMessageId": {
             "columns": ["providerMessageId"]

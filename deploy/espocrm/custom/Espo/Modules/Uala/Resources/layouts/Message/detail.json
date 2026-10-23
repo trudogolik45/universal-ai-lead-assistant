@@ -7,7 +7,7 @@
                     "name": "conversation"
                 },
                 {
-                    "name": "createdAt"
+                    "name": "sentAt"
                 }
             ],
             [

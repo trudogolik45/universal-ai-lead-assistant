@@ -1,0 +1,169 @@
+{
+  "id": "uala0crmWriteMsg",
+  "name": "Write message to CRM",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "c7d2a1e1-0000-4000-8000-000000000001",
+      "name": "Message to write",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "message_id",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e1-0000-4000-8000-000000000002",
+      "name": "Claim message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Сообщение ещё не в CRM и не в работе у другого вызова (свежая попытка моложе 5 минут).\n-- Строки нет — уже записано или пишется: поток останавливается.\nupdate messages m set crm_claimed_at = now()\nfrom conversations v\nwhere m.id = nullif($1, '')::uuid and v.id = m.conversation_id and m.crm_message_id is null\n  and (m.crm_claimed_at is null or m.crm_claimed_at < now() - interval '5 minutes')\nreturning m.id as message_id, v.channel, v.sender_id, m.direction, m.text, m.provider_message_id,\n  to_char(m.created_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as sent_at",
+        "options": {
+          "queryReplacement": "={{ [$json.message_id] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e1-0000-4000-8000-000000000003",
+      "name": "Record in CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmAdapter0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "record_message",
+            "data": "={{ { channel: $json.channel, sender_id: $json.sender_id, direction: $json.direction, author: $json.direction === 'in' ? 'client' : 'assistant', text: $json.text, provider_message_id: $json.provider_message_id, sent_at: $json.sent_at } }}"
+          },
+          "matchingColumns": [
+            "operation",
+            "data"
+          ],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e1-0000-4000-8000-000000000004",
+      "name": "Mark written",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update messages set crm_message_id = $2 where id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [$('Claim message').item.json.message_id, $json.crm_message_id] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Message to write": {
+      "main": [
+        [
+          {
+            "node": "Claim message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim message": {
+      "main": [
+        [
+          {
+            "node": "Record in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record in CRM": {
+      "main": [
+        [
+          {
+            "node": "Mark written",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

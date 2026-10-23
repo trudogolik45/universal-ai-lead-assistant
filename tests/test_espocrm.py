@@ -60,6 +60,39 @@ def test_api_user_adds_client_and_assistant_messages_to_conversation(espocrm):
     ]
 
 
+def test_api_user_finds_conversation_by_channel_and_sender_as_crm_adapter_does(espocrm):
+    wanted = create_conversation(espocrm, "psid-210")
+    create_conversation(espocrm, "psid-211")
+
+    found = espocrm.api.find(
+        "Conversation",
+        [
+            {"type": "equals", "attribute": "channel", "value": "messenger"},
+            {"type": "equals", "attribute": "senderId", "value": "psid-210"},
+        ],
+        select=["id"],
+        maxSize=1,
+    )
+
+    assert [c["id"] for c in found] == [wanted["id"]]
+
+
+def test_conversation_messages_are_ordered_by_sent_time_not_by_write_time(espocrm):
+    conversation = create_conversation(espocrm, "psid-220")
+    for text, sent_at in (("Odpowiedź", "2026-10-23 10:00:07"), ("Pytanie", "2026-10-23 10:00:01")):
+        espocrm.api.create(
+            "Message",
+            {"conversationId": conversation["id"], "direction": "in", "author": "client", "text": text, "sentAt": sent_at},
+        )
+
+    messages = espocrm.api.related("Conversation", conversation["id"], "messages")
+
+    assert [(m["text"], m["sentAt"]) for m in messages] == [
+        ("Pytanie", "2026-10-23 10:00:01"),
+        ("Odpowiedź", "2026-10-23 10:00:07"),
+    ]
+
+
 def test_message_author_is_client_assistant_or_employee(espocrm):
     conversation = create_conversation(espocrm, "psid-300")
 
