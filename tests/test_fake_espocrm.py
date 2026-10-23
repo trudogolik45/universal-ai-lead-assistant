@@ -5,6 +5,7 @@
 """
 
 import json
+import time
 
 import httpx
 import pytest
@@ -202,3 +203,15 @@ def test_related_records_of_link_multiple_are_ordered(api, crm):
     found = api.get(f"WorkingTimeCalendar/{calendar['id']}/ranges", params={"orderBy": "dateStart", "order": "desc"})
 
     assert [r["dateStart"] for r in found.json()["list"]] == ["2031-12-31", "2031-12-24"]
+
+
+def test_slow_entity_answers_late_while_others_answer_at_once(api, crm):
+    with crm.slow("Meeting", 1):
+        started = time.monotonic()
+        api.get("Meeting")
+        slow = time.monotonic() - started
+        started = time.monotonic()
+        api.get("Contact")
+        fast = time.monotonic() - started
+
+    assert slow >= 1 > fast

@@ -3,7 +3,7 @@
 
 Подключён к фейк-серверу фикстурой `fake_server` (префикс /espocrm, env n8n ESPOCRM_BASE_URL).
 Тест читает записанное через `records(entity)` / `related(...)`, заводит своё через `add(...)`,
-недоступность CRM или одной сущности — `unavailable([entity])`.
+недоступность CRM или одной сущности — `unavailable([entity])`, медленную CRM — `slow(entity, seconds)`.
 Ответы повторяют настоящую EspoCRM на те же запросы (контракт — tests/test_espocrm.py);
 новый вид связи — строка в LINKS.
 """
@@ -11,6 +11,7 @@
 import json
 import re
 import threading
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -58,11 +59,14 @@ class FakeEspoCrm:
         self._records: dict[str, dict[str, dict]] = {}
         # Сущности, на запросы к которым CRM отвечает 503; ALL — вся CRM.
         self._unavailable: set[str] = set()
+        # Сущность → сколько секунд CRM думает над каждым запросом к ней.
+        self._slow: dict[str, float] = {}
 
     def reset(self):
         with self._lock:
             self._records.clear()
             self._unavailable.clear()
+            self._slow.clear()
 
     @contextmanager
     def unavailable(self, entity: str = ALL):
@@ -72,6 +76,15 @@ class FakeEspoCrm:
             yield
         finally:
             self._unavailable.discard(entity)
+
+    @contextmanager
+    def slow(self, entity: str, seconds: float):
+        """Запросы к сущности отвечают через seconds секунд, пока блок не закончится: окно гонки двух вызовов."""
+        self._slow[entity] = seconds
+        try:
+            yield
+        finally:
+            self._slow.pop(entity, None)
 
     def add(self, entity: str, data: dict) -> dict:
         """Запись, заведённая в CRM человеком (сотрудник, команда, задача), а не через n8n."""
@@ -92,6 +105,7 @@ class FakeEspoCrm:
         parts = url.path.removeprefix(self.PREFIX).split("/")
         if self._unavailable & {ALL, parts[0]}:
             return Response(503, None)
+        time.sleep(self._slow.get(parts[0], 0))
         if header(request, "X-Api-Key") != self._api_key:
             return Response(401, None)
         params = {key: values[-1] for key, values in parse_qs(url.query).items()}

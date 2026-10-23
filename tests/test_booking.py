@@ -178,12 +178,13 @@ def test_two_clients_do_not_get_the_same_slot(fake, crm, meta, client, other_cli
         threading.Thread(target=meta.post, args=(messenger_payload(PAGE_ID, sender, "Poniedziałek 10:00"),))
         for sender in (client, other_client)
     ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-
-    eventually(lambda: all(len(replies(fake, sender)) == 2 for sender in (client, other_client)))
+    # CRM думает над поиском Записей: оба Клиента проверяют слот, пока ни одна Запись ещё не создана.
+    with crm.slow("Meeting", 3):
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        eventually(lambda: all(len(replies(fake, sender)) == 2 for sender in (client, other_client)), timeout=60)
     assert sorted(replies(fake, sender)[1] for sender in (client, other_client)) == sorted([BOOKED, SLOT_TAKEN])
     assert len(crm.records("Meeting")) == 1
     assert len(completion_requests(fake)) == 4
