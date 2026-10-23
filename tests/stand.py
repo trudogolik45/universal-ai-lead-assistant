@@ -1,4 +1,4 @@
-"""Тестовый стенд: docker-compose.test.yml (Postgres, n8n, EspoCRM), импорт workflow и credentials.
+"""Тестовый стенд: docker-compose.test.yml (Postgres, n8n, Mailpit, EspoCRM), импорт workflow и credentials.
 
 Порядок: Postgres → миграции (фикстура `database_url`) → n8n с базовыми URL фейк-сервера →
 scripts.n8n_sync.push, как в проде: credentials, импорт и публикация всех n8n/workflows/*.json,
@@ -94,6 +94,10 @@ class Stand:
         wait_until(lambda: admin.http.get("App/user").status_code == 200, f"API EspoCRM {url}", timeout=300)
         api = EspoCrm(url, api_key=bootstrap(admin))
         return EspoCrmStand(url, admin, api, websocket=self.host_url("espocrm-websocket", 8080))
+
+    def mailpit_url(self) -> str:
+        """API Mailpit: письма, которые n8n отправил по SMTP. Поднимается вместе с n8n."""
+        return f"http://{self.host_url('mailpit', 8025)}"
 
     def n8n_url(self) -> str:
         # Спрашивать после каждого (пере)запуска: случайный порт хоста меняется.

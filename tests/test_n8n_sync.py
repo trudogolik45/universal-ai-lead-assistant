@@ -22,6 +22,8 @@ STAND_SECRETS = [
     "test-retry-secret",
     "test-espocrm-key",
     "test-employee-reply-secret",
+    "test-report-secret",
+    "test-smtp-password",
     "postgresql://test:test@",
 ]
 

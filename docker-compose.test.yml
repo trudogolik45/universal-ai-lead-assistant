@@ -60,6 +60,18 @@ services:
       RETRY_WEBHOOK_SECRET: test-retry-secret
       ESPOCRM_API_KEY: test-espocrm-key
       EMPLOYEE_REPLY_SECRET: test-employee-reply-secret
+      REPORT_WEBHOOK_SECRET: test-report-secret
+      # Отчёты владельцу: письма уходят в Mailpit стенда, он принимает любой логин.
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_SECURE: "false"
+      SMTP_USER: test-smtp-user
+      SMTP_PASSWORD: test-smtp-password
+      SMTP_FROM: raporty@uala.test
+      OWNER_REPORT_EMAIL: wlasciciel@autopro.test
+      # Отчёты по расписанию в тестах не срабатывают (1 января): прогоны только по вебхуку.
+      REPORT_DAILY_CRON: "0 0 1 1 *"
+      REPORT_WEEKLY_CRON: "0 0 1 1 *"
       # Расписание retry в тестах не срабатывает (1 января): прогоны только по вебхуку.
       RETRY_SCHEDULE_CRON: ${RETRY_SCHEDULE_CRON:-0 0 1 1 *}
       # Внешние API — фейк-сервер pytest на хосте (tests/fake_server.py).
@@ -74,6 +86,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  # SMTP-сервер для писем n8n: принимает всё, ничего не отправляет, письма читаются через его API.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:${STAND_MAILPIT_PORT:-0}:8025"
 
   espocrm:
     build: deploy/espocrm

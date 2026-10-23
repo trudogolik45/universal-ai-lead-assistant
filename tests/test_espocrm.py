@@ -14,6 +14,7 @@ from scripts.espocrm_knowledge import DEMO_CALENDAR, seed_calendar, seed_knowled
 from tests.booking import WORKING_CALENDAR_NODE, WORKING_RANGES_NODE, adapter_query, busy_where
 from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET, TASK_DONE_PATH
 from tests.knowledge import assistant_knowledge_query
+from tests.owner_report import report_where
 from tests.polling import eventually, stays
 
 
@@ -471,6 +472,30 @@ def test_api_user_books_meeting_for_client_and_vehicle_without_assignee(espocrm)
     )
     assert [m["id"] for m in espocrm.api.related("Contact", client["id"], "meetings")] == [meeting["id"]]
     assert [m["id"] for m in espocrm.api.related("Vehicle", vehicle["id"], "meetings")] == [meeting["id"]]
+
+
+def channel_total(client, entity: str, starts_at: str, ends_at: str, channel: str) -> int:
+    """Сколько записей Канала создано в периоде — тем же запросом, что у переходника CRM (только total)."""
+    search = json.dumps({"where": report_where(starts_at, ends_at, channel), "select": ["id"], "maxSize": 1})
+    return client.request("GET", entity, params={"searchParams": search})["total"]
+
+
+def test_api_user_counts_leads_and_meetings_of_channel_created_in_period(espocrm):
+    period = ("2000-01-01 00:00:00", "2100-01-01 00:00:00")
+    before = {entity: channel_total(espocrm.api, entity, *period, "call") for entity in ("Lead", "Meeting")}
+
+    lead = espocrm.api.create("Lead", {"lastName": "Nowak", "channel": "call"})
+    espocrm.api.create("Lead", {"lastName": "Nowak", "channel": "whatsapp"})
+    meeting = espocrm.api.create(
+        "Meeting", {"name": "Wizyta", "dateStart": "2031-03-05 09:00:00", "dateEnd": "2031-03-05 10:00:00"}
+    )
+    espocrm.api.update("Meeting", meeting["id"], {"channel": "call"})
+
+    assert channel_total(espocrm.api, "Lead", *period, "call") == before["Lead"] + 1
+    assert channel_total(espocrm.api, "Meeting", *period, "call") == before["Meeting"] + 1
+    created_at = espocrm.api.read("Lead", lead["id"])["createdAt"]
+    assert channel_total(espocrm.api, "Lead", created_at, created_at, "call") == 0
+    assert channel_total(espocrm.api, "Lead", "2000-01-01 00:00:00", created_at, "call") == before["Lead"]
 
 
 def autopro_calendar(espocrm) -> list[dict]:

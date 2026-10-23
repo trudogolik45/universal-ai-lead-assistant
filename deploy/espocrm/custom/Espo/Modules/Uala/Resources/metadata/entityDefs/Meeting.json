@@ -5,6 +5,19 @@
         },
         "vehicle": {
             "type": "link"
+        },
+        "channel": {
+            "type": "enum",
+            "options": [
+                "",
+                "messenger",
+                "instagram",
+                "whatsapp",
+                "call"
+            ],
+            "default": "",
+            "audited": true,
+            "tooltip": true
         }
     },
     "links": {

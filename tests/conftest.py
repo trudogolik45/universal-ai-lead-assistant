@@ -7,6 +7,7 @@ from scripts.migrate import migrate
 from tests.espocrm import EMPLOYEE_REPLY_PATH, TASK_DONE_PATH
 from tests.fake_espocrm import FakeEspoCrm
 from tests.fake_server import FakeServer
+from tests.mailpit import Mailpit
 from tests.stand import Stand, docker_available
 
 
@@ -93,3 +94,11 @@ def crm(fake, fake_espocrm):
 def n8n_url(stand, database_url, fake_server):
     """n8n стенда со всеми workflow из n8n/workflows, внешние API смотрят на фейк."""
     return stand.up_n8n(fake_server.base_urls())
+
+
+@pytest.fixture
+def mailpit(stand, n8n_url):
+    """Письма, отправленные n8n стенда (tests/mailpit.py); к началу теста ящик пуст."""
+    mailpit = Mailpit(stand.mailpit_url())
+    mailpit.clear()
+    return mailpit
