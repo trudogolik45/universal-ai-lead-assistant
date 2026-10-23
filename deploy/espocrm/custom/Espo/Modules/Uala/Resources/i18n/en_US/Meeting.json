@@ -1,10 +1,12 @@
 {
     "fields": {
         "vehicle": "Vehicle",
-        "channel": "Channel"
+        "channel": "Channel",
+        "repairOrders": "Repair orders"
     },
     "links": {
-        "vehicle": "Vehicle"
+        "vehicle": "Vehicle",
+        "repairOrders": "Repair orders"
     },
     "options": {
         "channel": {

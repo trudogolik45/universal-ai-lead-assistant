@@ -2,6 +2,7 @@
     "conversations",
     "vehicles",
     "leads",
+    "repairOrders",
     "opportunities",
     "cases",
     "targetLists"

@@ -25,6 +25,11 @@
             "type": "belongsTo",
             "entity": "Vehicle",
             "foreign": "meetings"
+        },
+        "repairOrders": {
+            "type": "hasMany",
+            "entity": "RepairOrder",
+            "foreign": "meeting"
         }
     }
 }

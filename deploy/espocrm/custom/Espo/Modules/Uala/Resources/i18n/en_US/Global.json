@@ -3,12 +3,14 @@
         "Conversation": "Conversation",
         "Message": "Message",
         "Vehicle": "Vehicle",
-        "KnowledgeItem": "Knowledge base entry"
+        "KnowledgeItem": "Knowledge base entry",
+        "RepairOrder": "Repair order"
     },
     "scopeNamesPlural": {
         "Conversation": "Conversations",
         "Message": "Messages",
         "Vehicle": "Vehicles",
-        "KnowledgeItem": "Knowledge base"
+        "KnowledgeItem": "Knowledge base",
+        "RepairOrder": "Repair orders"
     }
 }

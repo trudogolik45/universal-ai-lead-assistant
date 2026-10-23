@@ -7,12 +7,14 @@
         "vin": "VIN",
         "contact": "Client",
         "leads": "Leads",
-        "meetings": "Meetings"
+        "meetings": "Meetings",
+        "repairOrders": "Repair orders"
     },
     "links": {
         "contact": "Client",
         "leads": "Leads",
-        "meetings": "Meetings"
+        "meetings": "Meetings",
+        "repairOrders": "Repair orders"
     },
     "labels": {
         "Create Vehicle": "Create Vehicle"

@@ -4,13 +4,15 @@
         "Message": "Wiadomość",
         "Vehicle": "Pojazd",
         "KnowledgeItem": "Wpis bazy wiedzy",
-        "Lead": "Zgłoszenie"
+        "Lead": "Zgłoszenie",
+        "RepairOrder": "Zlecenie naprawy"
     },
     "scopeNamesPlural": {
         "Conversation": "Rozmowy",
         "Message": "Wiadomości",
         "Vehicle": "Pojazdy",
         "KnowledgeItem": "Baza wiedzy",
-        "Lead": "Zgłoszenia"
+        "Lead": "Zgłoszenia",
+        "RepairOrder": "Zlecenia naprawy"
     }
 }
