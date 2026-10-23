@@ -1,4 +1,5 @@
-"""Фейк REST API EspoCRM в фейк-сервере: записи в памяти, CRUD, обязательные поля, поиск (`equals`, `in`, `linkedWith`), связи.
+"""Фейк REST API EspoCRM в фейк-сервере: записи в памяти, CRUD, обязательные поля, поиск
+(`equals`, `notEquals`, `in`, `lessThan`, `greaterThan`, `linkedWith`), связи.
 
 Подключён к фейк-серверу фикстурой `fake_server` (префикс /espocrm, env n8n ESPOCRM_BASE_URL).
 Тест читает записанное через `records(entity)` / `related(...)`, заводит своё через `add(...)`,
@@ -34,7 +35,7 @@ REQUIRED = {
 # Телефон настоящая EspoCRM принимает только в международном формате (+48600123456), иначе 400.
 PHONE = re.compile(r"\+[0-9 ()-]+")
 
-# Связь hasMany (сущность, связь) → (связанная сущность, поле со ссылкой на родителя).
+# Связь hasMany (сущность, связь) → (связанная сущность, поле со ссылкой на родителя: id или список id).
 LINKS = {
     ("Conversation", "messages"): ("Message", "conversationId"),
     ("Contact", "conversations"): ("Conversation", "contactId"),
@@ -42,6 +43,9 @@ LINKS = {
     ("Contact", "leads"): ("Lead", "contactId"),
     ("Vehicle", "leads"): ("Lead", "vehicleId"),
     ("Conversation", "leads"): ("Lead", "conversationId"),
+    ("Contact", "meetings"): ("Meeting", "contactsIds"),
+    ("Vehicle", "meetings"): ("Meeting", "vehicleId"),
+    ("WorkingTimeCalendar", "ranges"): ("WorkingTimeRange", "calendarsIds"),
 }
 
 
@@ -81,7 +85,7 @@ class FakeEspoCrm:
 
     def related(self, entity: str, record_id: str, link: str, order_by: str | None = None) -> list[dict]:
         with self._lock:
-            return self._related(entity, record_id, link, order_by)
+            return self._related(entity, record_id, link, order_by, None)
 
     def __call__(self, request: Request) -> Response:
         url = urlsplit(request.path)
@@ -105,7 +109,8 @@ class FakeEspoCrm:
             case "PUT" | "PATCH", [entity, record_id]:
                 return self._update(entity, record_id, json.loads(body or b"{}"))
             case "GET", [entity, record_id, link]:
-                return Response(200, as_list(self._related(entity, record_id, link, params.get("orderBy"))))
+                related = self._related(entity, record_id, link, params.get("orderBy"), params.get("order"))
+                return Response(200, as_list(related))
         return Response(404, None)
 
     def _create(self, entity: str, data: dict) -> Response:
@@ -140,10 +145,10 @@ class FakeEspoCrm:
         page = [dict(r) for r in found[: int(params.get("maxSize") or len(found))]]
         return {"total": len(found), "list": page}
 
-    def _related(self, entity: str, record_id: str, link: str, order_by: str | None) -> list[dict]:
+    def _related(self, entity: str, record_id: str, link: str, order_by: str | None, order: str | None) -> list[dict]:
         child, parent_field = LINKS[(entity, link)]
-        children = [r for r in self._records.get(child, {}).values() if r.get(parent_field) == record_id]
-        return [dict(r) for r in ordered(children, order_by)]
+        children = [r for r in self._records.get(child, {}).values() if links_to(r.get(parent_field), record_id)]
+        return [dict(r) for r in ordered(children, order_by, order)]
 
 
 def header(request: Request, name: str) -> str | None:
@@ -153,6 +158,10 @@ def header(request: Request, name: str) -> str | None:
 def valid(data: dict) -> bool:
     phone = data.get("phoneNumber")
     return phone in (None, "") or bool(PHONE.fullmatch(phone))
+
+
+def links_to(parent: str | list | None, record_id: str) -> bool:
+    return record_id in parent if isinstance(parent, list) else parent == record_id
 
 
 def search_params(params: dict) -> dict:
@@ -175,6 +184,13 @@ def condition_matches(record: dict, condition: dict) -> bool:
     kind, attribute, value = condition["type"], condition["attribute"], condition.get("value")
     if kind == "equals":
         return record.get(attribute) == value
+    if kind == "notEquals":
+        return record.get(attribute) != value
+    # Даты EspoCRM («YYYY-MM-DD HH:MM:SS») сравниваются как строки; пустое поле не подходит.
+    if kind == "lessThan":
+        return record.get(attribute) is not None and record[attribute] < value
+    if kind == "greaterThan":
+        return record.get(attribute) is not None and record[attribute] > value
     if kind == "in":
         return record.get(attribute) in value
     if kind == "linkedWith":

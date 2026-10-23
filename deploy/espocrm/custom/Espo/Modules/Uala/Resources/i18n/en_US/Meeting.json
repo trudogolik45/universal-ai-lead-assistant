@@ -1,0 +1,8 @@
+{
+    "fields": {
+        "vehicle": "Vehicle"
+    },
+    "links": {
+        "vehicle": "Vehicle"
+    }
+}

@@ -89,6 +89,11 @@
             "type": "hasMany",
             "entity": "Lead",
             "foreign": "vehicle"
+        },
+        "meetings": {
+            "type": "hasMany",
+            "entity": "Meeting",
+            "foreign": "vehicle"
         }
     },
     "collection": {

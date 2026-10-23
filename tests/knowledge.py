@@ -33,9 +33,14 @@ def knowledge_requests(fake):
 
 def assistant_knowledge_query() -> dict[str, str]:
     """Query-параметры узла «Load knowledge base» из workflow репо: контрактный тест шлёт их в настоящую EspoCRM."""
+    return node_query(LOAD_NODE)
+
+
+def node_query(node_name: str) -> dict[str, str]:
+    """Query-параметры HTTP-узла n8n по имени, как они записаны в workflow репо."""
     for path in sorted(WORKFLOWS_DIR.glob("*.json")):
         for node in json.loads(path.read_text())["nodes"]:
-            if node["name"] == LOAD_NODE:
+            if node["name"] == node_name:
                 params = node["parameters"]["queryParameters"]["parameters"]
                 return {param["name"]: param["value"] for param in params}
-    raise LookupError(f"Нет узла «{LOAD_NODE}» в {WORKFLOWS_DIR}")
+    raise LookupError(f"Нет узла «{node_name}» в {WORKFLOWS_DIR}")

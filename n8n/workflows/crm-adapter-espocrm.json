@@ -1194,7 +1194,7 @@
             {
               "id": "a1",
               "name": "crm_lead_id",
-              "value": "={{ $json.id }}",
+              "value": "={{ $('CRM operation').item.json.data.crm_lead_id || $('Create lead').item.json.id }}",
               "type": "string"
             },
             {
@@ -1218,9 +1218,502 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
+        3960,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c28fre",
+              "leftValue": "={{ $json.operation === 'free_slots' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000001",
+      "name": "Free slots?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        2400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/WorkingTimeCalendar",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "orderBy",
+              "value": "name"
+            },
+            {
+              "name": "order",
+              "value": "asc"
+            },
+            {
+              "name": "maxSize",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000002",
+      "name": "Find working calendar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        2300
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c2843",
+              "leftValue": "={{ $json.list.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000003",
+      "name": "Calendar connected",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        2300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "calendar",
+              "value": "={{ false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "a2",
+              "name": "slots",
+              "value": "={{ [] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000004",
+      "name": "No calendar",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1100,
+        2500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/WorkingTimeCalendar/{{ $json.list[0].id }}/ranges",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "orderBy",
+              "value": "dateStart"
+            },
+            {
+              "name": "order",
+              "value": "desc"
+            },
+            {
+              "name": "maxSize",
+              "value": "200"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000005",
+      "name": "Find working ranges",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        2300
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Meeting",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'lessThan', attribute: 'dateStart', value: $now.toUTC().plus({ days: $('CRM operation').item.json.data.days + 1 }).toFormat('yyyy-MM-dd HH:mm:ss') }, { type: 'greaterThan', attribute: 'dateEnd', value: $now.toUTC().toFormat('yyyy-MM-dd HH:mm:ss') }, { type: 'notEquals', attribute: 'status', value: 'Not Held' } ], select: ['dateStart', 'dateEnd'], maxSize: 200 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000006",
+      "name": "Find busy meetings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        2300
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Свободные слоты: по SLOT_MINUTES от начала каждого рабочего интервала календаря на сегодня и data.days\n// дней вперёд, не раньше чем через LEAD_MINUTES от сейчас. Слот занят, если пересекается с Записью\n// (отменённые, Not Held, CRM в поиск не отдаёт). Один слот — одна Запись: мест на одно время одно.\n// Исключения календаря (WorkingTimeRange): Non-working — день закрыт, Working — свои часы.\nconst SLOT_MINUTES = 60;\nconst LEAD_MINUTES = 60;\n// Пустой часовой пояс календаря в EspoCRM — часовой пояс CRM; у Заказчиков в Польше это Europe/Warsaw.\nconst DEFAULT_TIME_ZONE = 'Europe/Warsaw';\nconst ESPO_FORMAT = 'yyyy-MM-dd HH:mm:ss';\n\nconst days = $('CRM operation').first().json.data.days;\nconst calendar = $('Find working calendar').first().json.list[0];\nconst exceptions = $('Find working ranges').first().json.list;\nconst busy = $input.first().json.list.filter((m) => m.dateStart && m.dateEnd);\nconst zone = calendar.timeZone || DEFAULT_TIME_ZONE;\nconst now = DateTime.now().setZone(zone);\nconst earliest = now.plus({ minutes: LEAD_MINUTES });\n\nfunction workingHours(day) {\n  const date = day.toISODate();\n  const exception = exceptions.find((range) => range.dateStart <= date && date <= range.dateEnd);\n  if (exception) return exception.type === 'Working' ? exception.timeRanges || calendar.timeRanges : [];\n  // Luxon: 1 — понедельник … 7 — воскресенье; EspoCRM: weekday0 — воскресенье.\n  const weekday = day.weekday % 7;\n  if (!calendar[`weekday${weekday}`]) return [];\n  return calendar[`weekday${weekday}TimeRanges`] || calendar.timeRanges;\n}\n\nfunction at(day, time) {\n  const [hour, minute] = time.split(':').map(Number);\n  return day.set({ hour, minute, second: 0, millisecond: 0 });\n}\n\nfunction isBusy(startsAt, endsAt) {\n  return busy.some((m) => m.dateStart < endsAt && m.dateEnd > startsAt);\n}\n\nfunction daySlots(day) {\n  const slots = [];\n  for (const [from, to] of workingHours(day)) {\n    const end = at(day, to);\n    for (let start = at(day, from); start.plus({ minutes: SLOT_MINUTES }) <= end; start = start.plus({ minutes: SLOT_MINUTES })) {\n      const startsAt = start.toUTC().toFormat(ESPO_FORMAT);\n      const endsAt = start.plus({ minutes: SLOT_MINUTES }).toUTC().toFormat(ESPO_FORMAT);\n      if (start < earliest || isBusy(startsAt, endsAt)) continue;\n      slots.push({ start: start.toFormat('yyyy-MM-dd HH:mm'), weekday: start.setLocale('en').toFormat('cccc'), starts_at: startsAt, ends_at: endsAt });\n    }\n  }\n  return slots;\n}\n\nconst slots = [];\nfor (let i = 0; i <= days; i++) slots.push(...daySlots(now.startOf('day').plus({ days: i })));\nreturn { json: { calendar: true, time_zone: zone, slots } };"
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000007",
+      "name": "Free slots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        2300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c28boo",
+              "leftValue": "={{ $json.operation === 'book_appointment' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000008",
+      "name": "Book appointment?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        3000
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Meeting",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'lessThan', attribute: 'dateStart', value: $('CRM operation').item.json.data.ends_at }, { type: 'greaterThan', attribute: 'dateEnd', value: $('CRM operation').item.json.data.starts_at }, { type: 'notEquals', attribute: 'status', value: 'Not Held' } ], select: ['id'], maxSize: 1 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000009",
+      "name": "Find slot meetings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        2900
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c2850",
+              "leftValue": "={{ $json.total === 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000010",
+      "name": "Slot free",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        2900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Meeting",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('CRM operation').item.json.data.name, description: $('CRM operation').item.json.data.description, dateStart: $('CRM operation').item.json.data.starts_at, dateEnd: $('CRM operation').item.json.data.ends_at, status: 'Planned' }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000011",
+      "name": "Create appointment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        2800
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "booked",
+              "value": "={{ true }}",
+              "type": "boolean"
+            },
+            {
+              "id": "a2",
+              "name": "crm_meeting_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000012",
+      "name": "Appointment booked",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1320,
+        2800
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "booked",
+              "value": "={{ false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "a2",
+              "name": "crm_meeting_id",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000013",
+      "name": "Slot taken",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1100,
+        3000
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c2854",
+              "leftValue": "={{ !!$('CRM operation').item.json.data.crm_meeting_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000014",
+      "name": "Appointment to link",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
         3520,
         1600
       ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Meeting/{{ $('CRM operation').item.json.data.crm_meeting_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contactsIds: [$('Client').item.json.contact_id], parentType: 'Lead', parentId: $('CRM operation').item.json.data.crm_lead_id || $('Create lead').item.json.id, ...($('Lead vehicle').item.json.vehicle_id ? { vehicleId: $('Lead vehicle').item.json.vehicle_id } : {}) }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c7d2a1e0-0028-4000-8000-000000000015",
+      "name": "Link appointment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3740,
+        1500
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
     }
   ],
   "connections": {
@@ -1468,7 +1961,7 @@
         ],
         [
           {
-            "node": "Unknown operation",
+            "node": "Free slots?",
             "type": "main",
             "index": 0
           }
@@ -1668,7 +2161,7 @@
       "main": [
         [
           {
-            "node": "Lead recorded",
+            "node": "Appointment to link",
             "type": "main",
             "index": 0
           }
@@ -1676,6 +2169,162 @@
       ]
     },
     "Create lead": {
+      "main": [
+        [
+          {
+            "node": "Appointment to link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Free slots?": {
+      "main": [
+        [
+          {
+            "node": "Find working calendar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Book appointment?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find working calendar": {
+      "main": [
+        [
+          {
+            "node": "Calendar connected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar connected": {
+      "main": [
+        [
+          {
+            "node": "Find working ranges",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find working ranges": {
+      "main": [
+        [
+          {
+            "node": "Find busy meetings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find busy meetings": {
+      "main": [
+        [
+          {
+            "node": "Free slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Book appointment?": {
+      "main": [
+        [
+          {
+            "node": "Find slot meetings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find slot meetings": {
+      "main": [
+        [
+          {
+            "node": "Slot free",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slot free": {
+      "main": [
+        [
+          {
+            "node": "Create appointment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slot taken",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create appointment": {
+      "main": [
+        [
+          {
+            "node": "Appointment booked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appointment to link": {
+      "main": [
+        [
+          {
+            "node": "Link appointment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lead recorded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link appointment": {
       "main": [
         [
           {

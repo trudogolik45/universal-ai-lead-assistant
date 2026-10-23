@@ -10,7 +10,8 @@ import uuid
 
 from scripts.espocrm import EspoCrm
 from scripts.espocrm_bootstrap import API_USER, ensure_api_user
-from scripts.espocrm_knowledge import seed_knowledge
+from scripts.espocrm_knowledge import DEMO_CALENDAR, seed_calendar, seed_knowledge
+from tests.booking import WORKING_CALENDAR_NODE, WORKING_RANGES_NODE, adapter_query, busy_where
 from tests.knowledge import assistant_knowledge_query
 from tests.polling import eventually
 
@@ -400,3 +401,90 @@ def test_demo_knowledge_base_is_seeded_once_and_keeps_owner_edits(espocrm):
     assert knowledge_total(espocrm) == total
     assert espocrm.admin.read("KnowledgeItem", oil["id"])["price"] == 130
     assert {item["kind"] for item in knowledge_base(espocrm.admin)} == {"service", "hours", "company", "faq", "rule"}
+
+
+def test_api_user_reads_working_time_calendar_as_crm_adapter_does(espocrm):
+    """Рабочий календарь — встроенный WorkingTimeCalendar с исключениями (праздники): график правит Заказчик."""
+    created = espocrm.admin.create(
+        "WorkingTimeCalendar",
+        {
+            "name": "Aaa kontrakt",
+            "timeZone": "Europe/Warsaw",
+            "timeRanges": [["8:00", "18:00"]],
+            "weekday6": True,
+            "weekday6TimeRanges": [["9:00", "14:00"]],
+        },
+    )
+    espocrm.admin.create(
+        "WorkingTimeRange",
+        {"type": "Non-working", "dateStart": "2031-12-24", "dateEnd": "2031-12-26", "calendarsIds": [created["id"]]},
+    )
+
+    found = espocrm.api.request("GET", "WorkingTimeCalendar", params=adapter_query(WORKING_CALENDAR_NODE))
+    ranges = espocrm.api.request(
+        "GET", f"WorkingTimeCalendar/{created['id']}/ranges", params=adapter_query(WORKING_RANGES_NODE)
+    )["list"]
+    espocrm.admin.request("DELETE", f"WorkingTimeCalendar/{created['id']}")
+
+    [calendar] = found["list"]
+    assert (calendar["id"], calendar["timeZone"], calendar["timeRanges"]) == (
+        created["id"], "Europe/Warsaw", [["8:00", "18:00"]]
+    )
+    assert [calendar[f"weekday{day}"] for day in range(7)] == [False, True, True, True, True, True, True]
+    assert calendar["weekday6TimeRanges"] == [["9:00", "14:00"]]
+    assert [(r["type"], r["dateStart"], r["dateEnd"]) for r in ranges] == [("Non-working", "2031-12-24", "2031-12-26")]
+
+
+def overlapping_meetings(client, starts_at: str, ends_at: str) -> list[str]:
+    """Записи, которые пересекаются со слотом, — тем же условием, что у переходника CRM."""
+    return find_ids(client, "Meeting", busy_where(starts_at, ends_at), maxSize=200)
+
+
+def test_api_user_finds_meetings_overlapping_slot(espocrm):
+    booked = espocrm.api.create(
+        "Meeting", {"name": "Wizyta", "dateStart": "2031-03-03 09:00:00", "dateEnd": "2031-03-03 10:00:00"}
+    )
+    espocrm.api.create(
+        "Meeting",
+        {"name": "Odwołana", "dateStart": "2031-03-03 10:00:00", "dateEnd": "2031-03-03 11:00:00", "status": "Not Held"},
+    )
+
+    assert overlapping_meetings(espocrm.api, "2031-03-03 09:30:00", "2031-03-03 10:30:00") == [booked["id"]]
+    assert overlapping_meetings(espocrm.api, "2031-03-03 10:00:00", "2031-03-03 11:00:00") == []
+    assert overlapping_meetings(espocrm.api, "2031-03-03 08:00:00", "2031-03-03 09:00:00") == []
+
+
+def test_api_user_books_meeting_for_client_and_vehicle_without_assignee(espocrm):
+    client = espocrm.api.create("Contact", {"firstName": "Jan", "lastName": "Kowalski"})
+    vehicle = espocrm.api.create("Vehicle", {"name": "Skoda Octavia", "contactId": client["id"]})
+
+    meeting = espocrm.api.create(
+        "Meeting",
+        {"name": "Wizyta: Jan Kowalski", "dateStart": "2031-03-04 09:00:00", "dateEnd": "2031-03-04 10:00:00"},
+    )
+    espocrm.api.update("Meeting", meeting["id"], {"contactsIds": [client["id"]], "vehicleId": vehicle["id"]})
+
+    read = espocrm.api.read("Meeting", meeting["id"])
+    assert (read["status"], read["dateStart"], read["dateEnd"], read["assignedUserId"]) == (
+        "Planned", "2031-03-04 09:00:00", "2031-03-04 10:00:00", None
+    )
+    assert [m["id"] for m in espocrm.api.related("Contact", client["id"], "meetings")] == [meeting["id"]]
+    assert [m["id"] for m in espocrm.api.related("Vehicle", vehicle["id"], "meetings")] == [meeting["id"]]
+
+
+def autopro_calendar(espocrm) -> list[dict]:
+    return espocrm.admin.find("WorkingTimeCalendar", [{"type": "equals", "attribute": "name", "value": DEMO_CALENDAR}])
+
+
+def test_demo_working_calendar_is_seeded_once_and_keeps_owner_edits(espocrm):
+    seed_calendar(espocrm.admin)
+    [calendar] = autopro_calendar(espocrm)
+    espocrm.admin.update("WorkingTimeCalendar", calendar["id"], {"weekday6": False})
+
+    seed_calendar(espocrm.admin)
+
+    [read] = autopro_calendar(espocrm)
+    assert (read["timeZone"], read["timeRanges"], read["weekday0"], read["weekday1"], read["weekday6"]) == (
+        "Europe/Warsaw", [["8:00", "18:00"]], False, True, False
+    )
+    assert read["weekday6TimeRanges"] == [["9:00", "14:00"]]

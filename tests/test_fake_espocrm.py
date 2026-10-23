@@ -176,3 +176,29 @@ def test_unavailable_entity_answers_503_while_others_work(api, crm):
 
     assert (failed.status_code, created.status_code) == (503, 200)
     assert crm.records("Task") == []
+
+
+def test_search_compares_dates_and_skips_not_equal(api, crm):
+    for name, start, status in (("a", "09", "Planned"), ("b", "10", "Planned"), ("c", "09", "Not Held")):
+        crm.add("Meeting", {
+            "name": name, "status": status,
+            "dateStart": f"2031-03-03 {start}:00:00", "dateEnd": f"2031-03-03 {int(start) + 1}:00:00",
+        })
+
+    found = search(api, "Meeting", [
+        {"type": "lessThan", "attribute": "dateStart", "value": "2031-03-03 10:00:00"},
+        {"type": "greaterThan", "attribute": "dateEnd", "value": "2031-03-03 09:30:00"},
+        {"type": "notEquals", "attribute": "status", "value": "Not Held"},
+    ]).json()
+
+    assert [m["name"] for m in found["list"]] == ["a"]
+
+
+def test_related_records_of_link_multiple_are_ordered(api, crm):
+    calendar = crm.add("WorkingTimeCalendar", {"name": "AutoPro"})
+    for day, calendars in (("2031-12-24", [calendar["id"]]), ("2031-12-31", [calendar["id"]]), ("2031-11-11", [])):
+        crm.add("WorkingTimeRange", {"dateStart": day, "calendarsIds": calendars})
+
+    found = api.get(f"WorkingTimeCalendar/{calendar['id']}/ranges", params={"orderBy": "dateStart", "order": "desc"})
+
+    assert [r["dateStart"] for r in found.json()["list"]] == ["2031-12-31", "2031-12-24"]
