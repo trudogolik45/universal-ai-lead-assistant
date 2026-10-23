@@ -6,13 +6,8 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17` (после мержа #27 и #25), команда `uv run pytest -rs`.
-- Результат: **192 passed, 1 skipped** за 1171 с.
-- Skipped: `tests/test_lead_delivery_google.py::test_qualified_lead_row_is_read_back_from_real_spreadsheet` —
-  запись в настоящую Google-таблицу и чтение обратно. Нужны `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
-  `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_SHEETS_TEST_SPREADSHEET_ID`; service account и
-  таблицу даёт Заказчик (docs/google-setup.md), их ещё нет. Та же доставка проверена на фейке Google
-  (`tests/test_lead_delivery.py`).
+- Дата: 2026-10-23, ветка `spec-17-37-remove-legacy` (спека #17, #37 поверх `spec-17`), команда `uv run pytest -rs`.
+- Результат: **169 passed** за 1288 с, пропусков нет (тест настоящей Google-таблицы ушёл вместе с доставкой в неё).
 
 ## Сценарии спеки → тесты
 
