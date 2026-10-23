@@ -6,8 +6,8 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17` (#37, затем мерж #26 и #28), команда `uv run pytest`.
-- Результат: **190 passed** за 836 с, пропусков нет.
+- Дата: 2026-10-23, ветка `spec-17-29-reminders` (от `spec-17` после #37, #26, #28), команда `uv run pytest`.
+- Результат: **200 passed** за 1000 с, пропусков нет.
 
 ## Сценарии спеки → тесты
 
@@ -62,6 +62,8 @@
 | Запись в настоящей EspoCRM (#28): API-пользователь читает рабочий календарь и его исключения запросами переходника, находит пересекающиеся со слотом Записи, ставит Meeting без исполнителя и связывает с Клиентом и Автомобилем; демо-календарь AutoPro заливается один раз и не затирает правки | `test_espocrm.py::test_api_user_reads_working_time_calendar_as_crm_adapter_does`, `test_api_user_finds_meetings_overlapping_slot`, `test_api_user_books_meeting_for_client_and_vehicle_without_assignee`, `test_demo_working_calendar_is_seeded_once_and_keeps_owner_edits` | passed |
 | Отчёты владельцу (#34): письмо на польском за вчера и за прошлую неделю (пн–вс) по Варшаве, в том числе через смену времени; по Каналу — Заявки, Записи и конверсия, итог и «Bez kanału»; ручной запуск только с секретом и известным периодом; без CRM письма нет; Заявка и Запись в CRM несут Канал Беседы | `test_owner_report.py` (9), `test_crm_lead.py::test_lead_in_crm_carries_channel_of_conversation_for_owner_reports`, `test_booking.py::test_client_is_booked_into_free_slot_as_meeting_of_client_and_vehicle` | passed |
 | Отчёт в настоящей EspoCRM (#34): поле «Kanał» у Lead и Meeting, API-пользователь считает их по Каналу и времени создания запросом переходника | `test_espocrm.py::test_api_user_counts_leads_and_meetings_of_channel_created_in_period` | passed |
+| Напоминания о Записи (#29): за 24 и за 2 часа, каждый срок один раз; Клиенту из WhatsApp — шаблон `appointment_reminder` с датой и временем на pl или en, из Messenger и Instagram — SMS через SMSAPI на телефон Заявки; отменённая Запись и срок, наступивший до записи, не напоминаются; неотправленное SMS уходит следующим запуском; ручной запуск только с секретом | `test_reminders.py` (9) | passed |
+| Напоминания в настоящей EspoCRM (#29): API-пользователь находит запланированные Записи в окне без отменённых | `test_espocrm.py::test_api_user_finds_planned_meetings_to_remind` | passed |
 | Фейк EspoCRM повторяет REST API: CRUD, обязательные поля, поиск `equals`/`notEquals`/`in`/`lessThan`/`greaterThan`/`greaterThanOrEquals`/`linkedWith`, `total` сверх `maxSize`, телефон в международном формате, связи (в том числе многие-ко-многим), 401 без ключа, 503 при недоступности CRM или одной сущности, медленная сущность | `test_fake_espocrm.py` (19) | passed |
 
 Флаки «не дождались за 30 с» в случайных тестах (запоздалый запрос предыдущего теста) — одна причина: фейк закрывал соединение первым, TIME_WAIT

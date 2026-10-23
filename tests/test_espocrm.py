@@ -16,6 +16,7 @@ from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET, TASK_DONE_
 from tests.knowledge import assistant_knowledge_query
 from tests.owner_report import report_where
 from tests.polling import eventually, stays
+from tests.reminders import planned_where
 
 
 def create_conversation(espocrm, sender_id: str) -> dict:
@@ -454,6 +455,23 @@ def test_api_user_finds_meetings_overlapping_slot(espocrm):
     assert overlapping_meetings(espocrm.api, "2031-03-03 09:30:00", "2031-03-03 10:30:00") == [booked["id"]]
     assert overlapping_meetings(espocrm.api, "2031-03-03 10:00:00", "2031-03-03 11:00:00") == []
     assert overlapping_meetings(espocrm.api, "2031-03-03 08:00:00", "2031-03-03 09:00:00") == []
+
+
+def test_api_user_finds_planned_meetings_to_remind(espocrm):
+    planned = espocrm.api.create(
+        "Meeting", {"name": "Wizyta", "dateStart": "2031-04-01 09:00:00", "dateEnd": "2031-04-01 10:00:00"}
+    )
+    espocrm.api.create(
+        "Meeting",
+        {"name": "Odwołana", "dateStart": "2031-04-01 11:00:00", "dateEnd": "2031-04-01 12:00:00", "status": "Not Held"},
+    )
+    espocrm.api.create(
+        "Meeting", {"name": "Później", "dateStart": "2031-04-02 09:00:00", "dateEnd": "2031-04-02 10:00:00"}
+    )
+
+    found = find_ids(espocrm.api, "Meeting", planned_where("2031-04-01 08:00:00", "2031-04-02 08:00:00"), maxSize=200)
+
+    assert found == [planned["id"]]
 
 
 def test_api_user_books_meeting_for_client_and_vehicle_without_assignee(espocrm):

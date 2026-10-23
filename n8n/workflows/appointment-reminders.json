@@ -1,0 +1,395 @@
+{
+  "id": "uala0reminders00",
+  "name": "Appointment reminders",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "c29a0000-0000-4000-8000-000000000001",
+      "name": "Every 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "={{ $env.REMINDER_SCHEDULE_CRON || '*/5 * * * *' }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c29a0000-0000-4000-8000-000000000002",
+      "name": "Run now",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "2b9c4e71-3a5d-4f0e-8c29-6d1f6e0a2901",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reminders",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "c29a0000-0000-4000-8000-000000000003",
+      "name": "Secret valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$env.RETRY_WEBHOOK_SECRET && $json.headers['x-retry-secret'] === $env.RETRY_WEBHOOK_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c29a0000-0000-4000-8000-000000000004",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        200
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "c29a0000-0000-4000-8000-000000000005",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        400
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "c29a0000-0000-4000-8000-000000000006",
+      "name": "Find planned appointments",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmAdapter0",
+          "mode": "id"
+        },
+        "mode": "once",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "planned_appointments",
+            "data": "={{ { hours: 24 } }}"
+          },
+          "matchingColumns": [
+            "operation",
+            "data"
+          ],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "c29a0000-0000-4000-8000-000000000007",
+      "name": "Claim due reminders",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Сроки напоминаний: за 24 часа (с 24 до 2 часов до Записи) и за 2 часа (последние 2 часа).\n-- Время Записи — из CRM (сотрудник мог её перенести), Клиент — из appointments (Запись Ассистента).\n-- Срок, наступивший раньше, чем Клиент записался, не напоминается: записанному за 10 часов\n-- «напоминание за сутки» не нужно. Каждый срок — один раз: строку ставит первый запуск, повтор берёт\n-- только неотправленное, взятое больше 5 минут назад (отправка упала).\nwith planned as (\n  select m->>'crm_meeting_id' as crm_meeting_id, (m->>'starts_at')::timestamp at time zone 'UTC' as starts_at\n  from jsonb_array_elements($1::jsonb) m\n),\ndue as (\n  select a.id as appointment_id, a.created_at, p.starts_at,\n    case when p.starts_at <= now() + interval '2 hours' then '2h' else '24h' end as kind\n  from planned p\n  join appointments a on a.crm_meeting_id = p.crm_meeting_id\n  where p.starts_at > now() and p.starts_at <= now() + interval '24 hours'\n),\nclaimed as (\n  insert into appointment_reminders (appointment_id, kind)\n  select appointment_id, kind from due\n  where created_at < starts_at - case kind when '2h' then interval '2 hours' else interval '24 hours' end\n  on conflict (appointment_id, kind) do update set claimed_at = now()\n  where appointment_reminders.sent_at is null and appointment_reminders.claimed_at < now() - interval '5 minutes'\n  returning appointment_id, kind\n)\nselect c.appointment_id, c.kind, l.conversation_id, co.name as company,\n  coalesce(v.language, co.default_language) as language,\n  to_char(d.starts_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as starts_at\nfrom claimed c\njoin due d on d.appointment_id = c.appointment_id\njoin appointments a on a.id = c.appointment_id\njoin leads l on l.id = a.lead_id\njoin conversations v on v.id = l.conversation_id\njoin companies co on co.id = a.company_id",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json.appointments)] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "c29a0000-0000-4000-8000-000000000008",
+      "name": "Reminder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Напоминание на языке Беседы: шаблон WhatsApp «appointment_reminder» одобрен у Meta на pl и en\n// (docs/whatsapp-setup.md, параметры — дата и время), текст SMS — те же два языка.\n// Время Записи — местное время Заказчика.\nconst TEMPLATE = 'appointment_reminder';\nconst TIME_ZONE = 'Europe/Warsaw';\nconst TEXTS = {\n  pl: (company, day, time) => `${company}: przypominamy o wizycie ${day} o godz. ${time}.`,\n  en: (company, day, time) => `${company}: reminder of your appointment on ${day} at ${time}.`,\n};\n\n// Postgres-узел без строк отдаёт один item без полей — напоминать некому.\nreturn $input.all().filter((item) => item.json.appointment_id).map(({ json: r }) => {\n  const start = DateTime.fromSQL(r.starts_at, { zone: 'utc' }).setZone(TIME_ZONE);\n  const day = start.toFormat('dd.MM.yyyy');\n  const time = start.toFormat('HH:mm');\n  const text = TEXTS[r.language === 'pl' ? 'pl' : 'en'](r.company, day, time);\n  return {\n    json: {\n      appointment_id: r.appointment_id,\n      kind: r.kind,\n      conversation_id: r.conversation_id,\n      text,\n      template: { name: TEMPLATE, parameters: [day, time] },\n    },\n  };\n});"
+      }
+    },
+    {
+      "id": "c29a0000-0000-4000-8000-000000000009",
+      "name": "Send reminder",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0sendClient0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $json.conversation_id }}",
+            "text": "={{ $json.text }}",
+            "template": "={{ $json.template }}"
+          },
+          "matchingColumns": [
+            "conversation_id",
+            "text",
+            "template"
+          ],
+          "schema": [
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "template",
+              "displayName": "template",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "c29a0000-0000-4000-8000-000000000010",
+      "name": "Mark reminder sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1540,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Клиенту ушло: срок больше не напоминается. Не ушло — строка ждёт повтора следующим запуском.\nupdate appointment_reminders set sent_at = now()\nwhere appointment_id = $1::uuid and kind = $2",
+        "options": {
+          "queryReplacement": "={{ [$('Reminder').item.json.appointment_id, $('Reminder').item.json.kind] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Find planned appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now": {
+      "main": [
+        [
+          {
+            "node": "Secret valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Secret valid": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200": {
+      "main": [
+        [
+          {
+            "node": "Find planned appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find planned appointments": {
+      "main": [
+        [
+          {
+            "node": "Claim due reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim due reminders": {
+      "main": [
+        [
+          {
+            "node": "Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminder": {
+      "main": [
+        [
+          {
+            "node": "Send reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send reminder": {
+      "main": [
+        [
+          {
+            "node": "Mark reminder sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  }
+}

@@ -24,13 +24,14 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 | `meta-webhook` | `POST /webhook/meta` | Подпись Meta → сообщения в буфер входящих (`inbox`, дубль по id сообщения отсекается) → 200 Meta → `process-inbox` |
 | `process-inbox` | вызов из других workflow | Сообщение из буфера через `handle-message`; дошло до конца — помечается обработанным, упало — остаётся в буфере |
 | `handle-message` | вызов из других workflow | Заказчик по странице или номеру → Сообщение в Беседу → База знаний и свободные слоты из EspoCRM → OpenRouter → Запись в слот через `book-appointment` → ответ Клиенту через `send-to-client`, Заявка, Передача человеку; входящее и ответ — в CRM через `write-message-to-crm`, Заявка — через `write-lead-to-crm`, Задача человеку — через `create-handoff-task` |
-| `send-to-client` | вызов из других workflow | Текст Клиенту в Канал его Беседы: Send API Messenger Platform (Messenger, Instagram Direct) или WhatsApp Cloud API; вне окна 24 часов после сообщения Клиента Messenger и Instagram — с меткой `HUMAN_AGENT`, WhatsApp — шаблон `news_update` |
+| `send-to-client` | вызов из других workflow | Текст Клиенту в Канал его Беседы: Send API Messenger Platform (Messenger, Instagram Direct) или WhatsApp Cloud API; вне окна 24 часов после сообщения Клиента Messenger и Instagram — с меткой `HUMAN_AGENT`, WhatsApp — шаблон `news_update`. Автоматизация (на входе `template`): WhatsApp — этим шаблоном с параметрами, Клиенту из Messenger и Instagram — SMS через SMSAPI на телефон Заявки |
+| `appointment-reminders` | раз в 5 минут; `POST /webhook/reminders` | Напоминания о Записи за 24 и за 2 часа: запланированные Записи (`Meeting` Planned) из CRM через переходник → один раз на срок (`appointment_reminders`) → `send-to-client` с шаблоном `appointment_reminder` |
 | `write-message-to-crm` | вызов из других workflow | Сообщение из Postgres в Беседу Клиента в CRM через переходник; не вышло — остаётся недописанным (`messages.crm_message_id` пуст) для retry |
 | `write-lead-to-crm` | вызов из других workflow | Заявка из Postgres в CRM с Клиентом и Автомобилем через переходник; не вышло или Заявка изменилась во время записи — её дописывает retry (`crm_leads`) |
 | `employee-reply` | `POST /webhook/employee-reply` | Ответ сотрудника из EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа переходит в режим человека, Ассистент в ней молчит, текст — Клиенту через `send-to-client` |
 | `task-done` | `POST /webhook/task-done` | Сотрудник закрыл Задачу «Передача человеку» в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа снова у Ассистента, Заявка `collecting` или `qualified` по обязательным полям |
 | `create-handoff-task` | вызов из других workflow | Передача человеку → Задача человеку в CRM через переходник: сводка на польском, ссылка на Беседу; не вышло — остаётся без задачи (`leads.handoff_task_id` пуст) для retry |
-| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операции: `record_message` — найти или создать Беседу по Каналу и id Клиента, добавить Сообщение; `create_task` — Задача человеку (Task) к Беседе: вид → команда (`handoff` → `Administratorzy`), в команде — активный сотрудник с наименьшим числом открытых задач; `record_lead` — Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить, Запись Заявки — привязать к ним; `free_slots` — свободные слоты по рабочему календарю (`WorkingTimeCalendar`) и Записям (`Meeting`); `book_appointment` — Запись (`Meeting`) в слот, если он ещё свободен; `report` — сколько Заявок и Записей создано за период, всего и по Каналам |
+| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операции: `record_message` — найти или создать Беседу по Каналу и id Клиента, добавить Сообщение; `create_task` — Задача человеку (Task) к Беседе: вид → команда (`handoff` → `Administratorzy`), в команде — активный сотрудник с наименьшим числом открытых задач; `record_lead` — Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить, Запись Заявки — привязать к ним; `free_slots` — свободные слоты по рабочему календарю (`WorkingTimeCalendar`) и Записям (`Meeting`); `book_appointment` — Запись (`Meeting`) в слот, если он ещё свободен; `planned_appointments` — запланированные Записи с началом в ближайшие `hours` часов; `report` — сколько Заявок и Записей создано за период, всего и по Каналам |
 | `book-appointment` | вызов из других workflow | Запись Клиента в выбранный Ассистентом слот: блокировка слота в Postgres (`slot_locks`) → Запись в CRM через переходник → `appointments`; слот занят — Записи нет |
 | `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram разработчиков (`ALERT_TELEGRAM_CHAT_ID`); Заказчик его не видит |
 | `owner-report` | каждый день и каждый понедельник в 7:00; `POST /webhook/owner-report` | Отчёт владельцу письмом на польском: Заявки, Записи и конверсия по каждому Каналу за вчера или прошлую неделю, цифры из CRM через переходник |
@@ -210,6 +211,19 @@ Instagram Direct идёт через Messenger Platform: аккаунт Instagra
 WhatsApp отвечает через Cloud API номера (`WHATSAPP_ACCESS_TOKEN`). В течение 24 часов с
 последнего сообщения Клиента ответ уходит свободным текстом. Позже уходит шаблон `news_update`:
 на pl, если Беседа на польском, иначе на en.
+
+### Напоминания о Записи
+
+`appointment-reminders` идёт по расписанию (`REMINDER_SCHEDULE_CRON`, по умолчанию раз в 5 минут) и
+напоминает о Записях, поставленных Ассистентом: за 24 часа и за 2 часа, каждый срок один раз. Время
+и статус Записи берутся из CRM: перенесённая сотрудником Запись напоминается по новому времени,
+отменённая (`Not Held`) — не напоминается. Срок, наступивший раньше, чем Клиент записался, пропускается.
+Не ушло (сбой WhatsApp или SMSAPI) — следующий запуск повторит через 5 минут, пока срок не прошёл.
+
+Клиент из WhatsApp получает шаблон `appointment_reminder` (дата и время, pl или en). Messenger и
+Instagram Автоматизации после 24 часов не пускают, поэтому Клиенту оттуда уходит SMS через SMSAPI
+(`SMSAPI_TOKEN`, `SMSAPI_SENDER`) на телефон из Заявки, тоже на pl или en. Запустить сразу:
+`curl -X POST https://n8n.n3spark.io/webhook/reminders -H "X-Retry-Secret: $RETRY_WEBHOOK_SECRET"`.
 
 ### Алерт «AI не отвечает»
 

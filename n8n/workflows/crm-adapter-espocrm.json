@@ -1810,6 +1810,99 @@
         1100,
         3500
       ]
+    },
+    {
+      "id": "c7d2a1e0-0029-4000-8000-000000000001",
+      "name": "Planned appointments?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        3800
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c29pla",
+              "leftValue": "={{ $json.operation === 'planned_appointments' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c7d2a1e0-0029-4000-8000-000000000002",
+      "name": "Find planned meetings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        3700
+      ],
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Meeting",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'equals', attribute: 'status', value: 'Planned' }, { type: 'greaterThan', attribute: 'dateStart', value: $now.toUTC().toFormat('yyyy-MM-dd HH:mm:ss') }, { type: 'lessThan', attribute: 'dateStart', value: $now.toUTC().plus({ hours: $('CRM operation').item.json.data.hours }).toFormat('yyyy-MM-dd HH:mm:ss') } ], select: ['dateStart'], orderBy: 'dateStart', order: 'asc', maxSize: 200 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c7d2a1e0-0029-4000-8000-000000000003",
+      "name": "Planned appointments",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        3700
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c29app",
+              "name": "appointments",
+              "type": "array",
+              "value": "={{ $json.list.map((m) => ({ crm_meeting_id: m.id, starts_at: m.dateStart })) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
     }
   ],
   "connections": {
@@ -2442,7 +2535,7 @@
         ],
         [
           {
-            "node": "Unknown operation",
+            "node": "Planned appointments?",
             "type": "main",
             "index": 0
           }
@@ -2465,6 +2558,35 @@
         [
           {
             "node": "Report counts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Planned appointments?": {
+      "main": [
+        [
+          {
+            "node": "Find planned meetings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find planned meetings": {
+      "main": [
+        [
+          {
+            "node": "Planned appointments",
             "type": "main",
             "index": 0
           }
