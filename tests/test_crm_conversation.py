@@ -9,6 +9,7 @@ import uuid
 import pytest
 
 from tests.factories import create_company
+from tests.knowledge import KNOWLEDGE_PATH
 from tests.meta import MetaClient, messenger_payload, new_mid
 from tests.openrouter import assistant_reply, respond_with
 from tests.polling import eventually, stays
@@ -16,6 +17,7 @@ from tests.retry import run_retry
 
 PAGE_ID = "page-400"
 SEND_API_PATH = "/meta/me/messages"
+CONVERSATION_PATH = "/espocrm/api/v1/Conversation"
 
 
 @pytest.fixture
@@ -54,6 +56,11 @@ def conversation_messages(crm, sender_id):
 
 def replies_sent(fake):
     return fake.requests(SEND_API_PATH)
+
+
+def processing_stale(db, minutes=10):
+    """Обработку из буфера взяли minutes назад: retry повторяет её."""
+    db.execute("update inbox set claimed_at = now() - make_interval(mins => %s)", (minutes,))
 
 
 def crm_write_stale(db, minutes=10):
@@ -100,10 +107,12 @@ def test_unavailable_crm_does_not_lose_messages_and_retry_writes_them_after_reco
     respond_with(fake, assistant_reply(reply="Dzień dobry, w czym pomóc?"))
     with crm.unavailable():
         meta.post(messenger_payload(PAGE_ID, client, "Dzień dobry"))
-        eventually(lambda: replies_sent(fake))
-        stays(lambda: conversations(crm, client) == [])
+        # Без CRM нет и Базы знаний: Ассистент молчит, Сообщение ждёт в буфере (#23).
+        eventually(lambda: fake.requests(KNOWLEDGE_PATH) and fake.requests(CONVERSATION_PATH))
+        stays(lambda: conversations(crm, client) == [] and replies_sent(fake) == [])
 
     crm_write_stale(db)
+    processing_stale(db)
     run_retry(n8n_url)
 
     assert eventually(lambda: len(conversation_messages(crm, client)) == 2 and conversation_messages(crm, client)) == [
