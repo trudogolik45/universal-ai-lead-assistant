@@ -11,7 +11,7 @@ import uuid
 from scripts.espocrm import EspoCrm
 from scripts.espocrm_bootstrap import API_USER, ensure_api_user
 from scripts.espocrm_knowledge import seed_knowledge
-from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET
+from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET, TASK_DONE_PATH
 from tests.knowledge import assistant_knowledge_query
 from tests.polling import eventually, stays
 
@@ -437,3 +437,44 @@ def test_messages_written_by_n8n_do_not_call_n8n_back(espocrm, fake):
     )
 
     stays(lambda: employee_replies(fake) == [])
+
+
+def handoff_task(espocrm, user: dict, conversation: dict) -> dict:
+    return espocrm.api.create(
+        "Task",
+        {
+            "name": "Przekazanie rozmowy: Jan Kowalski",
+            "status": "Not Started",
+            "parentType": "Conversation",
+            "parentId": conversation["id"],
+            "assignedUserId": user["id"],
+            "teamsIds": user["teamsIds"],
+        },
+    )
+
+
+def done_tasks(fake) -> list:
+    return fake.requests(TASK_DONE_PATH)
+
+
+def test_employee_closing_conversation_task_calls_n8n_with_task_id(espocrm, fake):
+    user = employee(espocrm, "Administratorzy")
+    task = handoff_task(espocrm, user, create_conversation(espocrm, "psid-420"))
+    as_employee = EspoCrm(espocrm.url, admin=(user["userName"], EMPLOYEE_PASSWORD))
+
+    as_employee.update("Task", task["id"], {"status": "Completed"})
+
+    [call] = eventually(lambda: done_tasks(fake))
+    assert call.headers["X-Uala-Secret"] == EMPLOYEE_REPLY_SECRET
+    assert call.json() == {"crm_task_id": task["id"]}
+
+
+def test_task_still_open_or_without_conversation_does_not_call_n8n(espocrm, fake):
+    user = employee(espocrm, "Administratorzy")
+    task = handoff_task(espocrm, user, create_conversation(espocrm, "psid-430"))
+    other = espocrm.admin.create("Task", {"name": "Zamówić części", "status": "Not Started", "assignedUserId": user["id"]})
+
+    espocrm.admin.update("Task", task["id"], {"status": "Started"})
+    espocrm.admin.update("Task", other["id"], {"status": "Completed"})
+
+    stays(lambda: done_tasks(fake) == [])

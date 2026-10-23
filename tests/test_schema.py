@@ -124,3 +124,21 @@ def test_auto_service_company_requires_phone_and_vehicle(db):
     assert db.execute("select required_fields from companies").fetchone()[0] == [
         "name", "phone", "vehicle_brand", "vehicle_model", "description", "desired_date",
     ]
+
+
+def columns(db, table):
+    return {
+        row[0]
+        for row in db.execute(
+            "select column_name from information_schema.columns where table_schema = 'public' and table_name = %s",
+            (table,),
+        )
+    }
+
+
+def test_delivery_to_sheets_telegram_and_crm_webhook_left_no_columns(db):
+    # Канал доставки ушёл (ADR 0001): Заявки и Задачи человеку — в EspoCRM.
+    assert columns(db, "companies").isdisjoint(
+        {"sheets_spreadsheet_id", "sheets_sheet_name", "telegram_chat_id", "crm_webhook_url"}
+    )
+    assert columns(db, "leads").isdisjoint({"sheets_delivered_at", "telegram_sent_at", "handoff_sent_at"})

@@ -121,150 +121,6 @@
       "parameters": {}
     },
     {
-      "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000007",
-      "name": "Find undelivered leads",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        880,
-        -100
-      ],
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Заявки, не дошедшие до Канала доставки, который есть у Заказчика. Свежие (2 минуты) ещё\n-- доставляет основной поток. Sheets — только qualified и с таблицей, как основной поток.\n-- Telegram: qualified — «Новая заявка» (telegram_sent_at), needs_human — сводка (handoff_sent_at);\n-- отметки проверяет и сам notify-lead.\nwith pending as (\n  select l.id, l.created_at,\n    (l.status = 'qualified' and l.sheets_delivered_at is null and co.sheets_spreadsheet_id is not null)\n      as sheets_pending,\n    (co.telegram_chat_id is not null and case l.status when 'qualified' then l.telegram_sent_at is null\n      else l.handoff_sent_at is null end) as telegram_pending\n  from leads l\n  join companies co on co.id = l.company_id\n  where l.status in ('qualified', 'needs_human') and l.updated_at < now() - interval '2 minutes'\n)\nselect id as lead_id, sheets_pending\nfrom pending\nwhere sheets_pending or telegram_pending\norder by created_at",
-        "options": {}
-      },
-      "credentials": {
-        "postgres": {
-          "id": "uala0postgres001",
-          "name": "Supabase"
-        }
-      }
-    },
-    {
-      "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000008",
-      "name": "Sheets pending",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        1100,
-        -200
-      ],
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "combinator": "and",
-          "conditions": [
-            {
-              "id": "c1",
-              "leftValue": "={{ $json.sheets_pending }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ]
-        },
-        "options": {}
-      }
-    },
-    {
-      "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000009",
-      "name": "Deliver lead",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [
-        1320,
-        -200
-      ],
-      "onError": "continueRegularOutput",
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "value": "uala0deliverLead",
-          "mode": "id"
-        },
-        "mode": "each",
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "lead_id": "={{ $json.lead_id }}"
-          },
-          "matchingColumns": [
-            "lead_id"
-          ],
-          "schema": [
-            {
-              "id": "lead_id",
-              "displayName": "lead_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
-        },
-        "options": {
-          "waitForSubWorkflow": true
-        }
-      }
-    },
-    {
-      "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000010",
-      "name": "Notify lead",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [
-        1100,
-        0
-      ],
-      "onError": "continueRegularOutput",
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "value": "uala0notifyLead0",
-          "mode": "id"
-        },
-        "mode": "each",
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "lead_id": "={{ $json.lead_id }}"
-          },
-          "matchingColumns": [
-            "lead_id"
-          ],
-          "schema": [
-            {
-              "id": "lead_id",
-              "displayName": "lead_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
-        },
-        "options": {
-          "waitForSubWorkflow": true
-        }
-      }
-    },
-    {
       "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000011",
       "name": "Close silent conversations",
       "type": "n8n-nodes-base.postgres",
@@ -296,7 +152,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Алерты «AI не отвечает», не дошедшие до группы Заказчика. Свежие (2 минуты) шлёт основной поток.\nselect m.id as message_id\nfrom messages m\njoin companies c on c.id = m.company_id\nwhere m.ai_failed_at < now() - interval '2 minutes' and m.ai_alert_sent_at is null\n  and c.telegram_chat_id is not null\norder by m.ai_failed_at",
+        "query": "-- Алерты «AI не отвечает», не дошедшие до разработчиков. Свежие (2 минуты) шлёт основной поток.\nselect id as message_id\nfrom messages\nwhere ai_failed_at < now() - interval '2 minutes' and ai_alert_sent_at is null\norder by ai_failed_at",
         "options": {}
       },
       "credentials": {
@@ -672,11 +528,6 @@
       "main": [
         [
           {
-            "node": "Find undelivered leads",
-            "type": "main",
-            "index": 0
-          },
-          {
             "node": "Close silent conversations",
             "type": "main",
             "index": 0
@@ -703,33 +554,6 @@
           },
           {
             "node": "Find leads not in CRM",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Find undelivered leads": {
-      "main": [
-        [
-          {
-            "node": "Sheets pending",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Notify lead",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Sheets pending": {
-      "main": [
-        [
-          {
-            "node": "Deliver lead",
             "type": "main",
             "index": 0
           }

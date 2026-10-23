@@ -39,15 +39,11 @@ def test_seed_twice_creates_no_duplicates(db, database_url):
     assert company_count(db) == first
 
 
-def test_seed_binds_demo_page_and_delivery_channel(db, database_url):
-    seed(database_url, demo_page_id="page-123", telegram_chat_id="-100500", spreadsheet_id="sheet-1")
+def test_seed_binds_demo_messenger_page(db, database_url):
+    seed(database_url, demo_page_id="1297733916767033")
 
-    demo = db.execute(
-        "select messenger_page_id, telegram_chat_id, sheets_spreadsheet_id, sheets_sheet_name"
-        " from companies where slug = %s",
-        (DEMO_COMPANY_SLUG,),
-    ).fetchone()
-    assert demo == ("page-123", "-100500", "sheet-1", "Leads")
+    demo = db.execute("select messenger_page_id from companies where slug = %s", (DEMO_COMPANY_SLUG,)).fetchone()
+    assert demo == ("1297733916767033",)
 
 
 def test_seed_binds_demo_whatsapp_number(db, database_url):

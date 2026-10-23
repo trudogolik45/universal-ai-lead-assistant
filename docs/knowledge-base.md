@@ -106,22 +106,15 @@ update companies set default_language = 'en' where slug = 'uniwersalny-serwis';
 update companies set ai_model = '<id модели с openrouter.ai/models>' where slug = 'uniwersalny-serwis';
 ```
 
-## Каналы доставки
+## Каналы
 
-Куда приходят Заявки, тоже в `companies`:
+Заявки, Клиенты и Задачи человеку Заказчик видит в своей EspoCRM. По идентификатору Канала
+входящее Сообщение находит Заказчика, поля тоже в `companies`:
 
 | Поле | Что это | Инструкция |
 |---|---|---|
-| `sheets_spreadsheet_id`, `sheets_sheet_name` | Google-таблица и лист (по умолчанию `Leads`) | [google-setup.md](google-setup.md) |
-| `telegram_chat_id` | Группа Telegram для уведомлений и Передачи человеку | README, «Telegram» |
-| `crm_webhook_url` | CRM-webhook | [crm-webhook.md](crm-webhook.md) |
-| `messenger_page_id` | id страницы Facebook: по нему входящее Сообщение находит Заказчика | [meta-setup.md](meta-setup.md) |
-
-```sql
-update companies
-set sheets_spreadsheet_id = '<id таблицы из URL>', telegram_chat_id = '-100...'
-where slug = 'uniwersalny-serwis';
-```
+| `messenger_page_id` | id страницы Facebook | [meta-setup.md](meta-setup.md) |
+| `whatsapp_phone_number_id` | Phone number ID номера WhatsApp | [whatsapp-setup.md](whatsapp-setup.md) |
 
 ## Новый Заказчик
 

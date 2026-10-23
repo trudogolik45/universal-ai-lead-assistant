@@ -1,8 +1,8 @@
 # Universal AI Lead Assistant
 
 AI-ассистент для входящих заявок малого бизнеса в Messenger и WhatsApp: отвечает Клиенту по Базе знаний
-Заказчика, собирает Заявку и доставляет её в Google-таблицу, Telegram и CRM-webhook.
-Спека: issue #1, термины: `GLOSSARY.md`.
+Заказчика, собирает Заявку и ведёт Беседу, Клиента, Заявку и Задачи человеку в EspoCRM Заказчика.
+Спека: issue #17 (первая версия — #1), термины: `GLOSSARY.md`.
 
 ## Документы
 
@@ -11,10 +11,8 @@ AI-ассистент для входящих заявок малого бизн
 | `GLOSSARY.md` | Термины: Заказчик, Клиент, Ассистент, Беседа, Заявка, Режим ответа, Передача человеку |
 | [docs/deviations.md](docs/deviations.md) | Чем MVP отличается от ТЗ и почему |
 | [docs/knowledge-base.md](docs/knowledge-base.md) | Как менять Базу знаний, обязательные поля, Режим ответа, модель AI; удаление данных Клиента |
-| [docs/crm-webhook.md](docs/crm-webhook.md) | Подключение CRM через webhook, формат JSON, когда уходит |
 | [docs/meta-setup.md](docs/meta-setup.md) | Для Заказчика: приложение Meta, страница, вебхук, токены |
 | [docs/whatsapp-setup.md](docs/whatsapp-setup.md) | Для Заказчика: номер WhatsApp, постоянный токен, вебхук, шаблон «есть новости» |
-| [docs/google-setup.md](docs/google-setup.md) | Для Заказчика: service account, JSON-ключ, доступ к таблице |
 | [docs/test-results.md](docs/test-results.md) | Сценарии спеки → тесты → результат последнего прогона |
 
 ## Как устроено
@@ -30,13 +28,11 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 | `write-message-to-crm` | вызов из других workflow | Сообщение из Postgres в Беседу Клиента в CRM через переходник; не вышло — остаётся недописанным (`messages.crm_message_id` пуст) для retry |
 | `write-lead-to-crm` | вызов из других workflow | Заявка из Postgres в CRM с Клиентом и Автомобилем через переходник; не вышло или Заявка изменилась во время записи — её дописывает retry (`crm_leads`) |
 | `employee-reply` | `POST /webhook/employee-reply` | Ответ сотрудника из EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа переходит в режим человека, Ассистент в ней молчит, текст — Клиенту через `send-to-client` |
+| `task-done` | `POST /webhook/task-done` | Сотрудник закрыл Задачу «Передача человеку» в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа снова у Ассистента, Заявка `collecting` или `qualified` по обязательным полям |
 | `create-handoff-task` | вызов из других workflow | Передача человеку → Задача человеку в CRM через переходник: сводка на польском, ссылка на Беседу; не вышло — остаётся без задачи (`leads.handoff_task_id` пуст) для retry |
 | `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операции: `record_message` — найти или создать Беседу по Каналу и id Клиента, добавить Сообщение; `create_task` — Задача человеку (Task) к Беседе: вид → команда (`handoff` → `Administratorzy`), в команде — активный сотрудник с наименьшим числом открытых задач; `record_lead` — Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить |
-| `deliver-lead` | вызов из других workflow | Заявка в Google-таблицу, затем в CRM-webhook |
-| `notify-lead` | вызов из других workflow | Уведомление о Заявке или Передаче человеку в группу Telegram |
-| `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram |
-| `telegram-callback` | `POST /webhook/telegram` | Кнопки «Вернуть ассистенту» и «Закрыть»; возврат с полной Заявкой доставляет и объявляет её |
-| `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Повтор необработанных сообщений буфера, дозапись Сообщений, Заявок и Задач человеку в CRM, недоставленных Заявок и алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
+| `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram разработчиков (`ALERT_TELEGRAM_CHAT_ID`); Заказчик его не видит |
+| `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Повтор необработанных сообщений буфера, дозапись Сообщений, Заявок и Задач человеку в CRM, недошедших алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
 
 Рядом работает EspoCRM на своём Postgres (`deploy/espocrm`, ADR 0001 и 0002). В её модуле Uala
 есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`), Автомобиль (`Vehicle`)
@@ -48,8 +44,11 @@ REST API под API-пользователем `n8n`, только через п
 в Беседе упорядочены по времени отправки (`Message.sentAt`), а не записи: дописанное retry встаёт
 на своё место. Сообщение, которое сотрудник пишет в Беседе, хуки модуля Uala помечают исходящим
 от сотрудника и сразу (таймаут 2 с) отправляют в n8n (`employee-reply`); встроенные webhooks
-EspoCRM не используются — они уходят по расписанию. n8n не ответил — ошибка в логе EspoCRM,
-повтора нет.
+EspoCRM не используются — они уходят по расписанию. Так же сразу хук зовёт n8n (`task-done`), когда
+сотрудник закрывает Задачу к Беседе (статус «Completed» или «Canceled»): если это Задача
+«Передача человеку», Беседа возвращается Ассистенту. Беседа, в которую сотрудник написал сам
+без Передачи человеку, остаётся у человека до закрытия после 7 дней тишины. n8n не ответил —
+ошибка в логе EspoCRM, повтора нет.
 
 Секреты — только в `.env` на VPS и в credentials n8n; в репо их нет. Имена и назначение всех
 переменных — `.env.example`.
@@ -65,7 +64,7 @@ uv run pytest
 Фикстуры (`tests/conftest.py`, `tests/stand.py`) сами поднимают стенд `docker-compose.test.yml`
 (Postgres вместо Supabase и n8n той же версии, что в проде), применяют миграции, заливают
 credentials и все workflow той же командой, что и прод (`scripts/n8n_sync.py`), и после прогона
-удаляют контейнеры. Внешние API (OpenRouter, Meta Graph, Telegram, Google Sheets, CRM) изображает
+удаляют контейнеры. Внешние API (OpenRouter, Meta Graph, Telegram, EspoCRM) изображает
 фейк-сервер `tests/fake_server.py` на хосте, n8n ходит в него через `host.docker.internal`.
 EspoCRM на главном шве — фейк с состоянием `tests/fake_espocrm.py` (фикстура `crm`: записи, которые
 сделал n8n; `crm.unavailable()` — CRM лежит). Настоящая EspoCRM — только в контрактных тестах
@@ -80,11 +79,6 @@ EspoCRM на главном шве — фейк с состоянием `tests/f
   минут), API-пользователь `n8n` — тем же `scripts/espocrm_bootstrap.py`, что в проде. Админка
   стенда — `docker compose -p <проект> -f docker-compose.test.yml port espocrm 80`, вход
   `admin` / `test-espocrm-admin`.
-- Настоящая Google-таблица (`tests/test_lead_delivery_google.py`): задать
-  `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` и
-  `GOOGLE_SHEETS_TEST_SPREADSHEET_ID` (таблица расшарена на service account как Editor). Тест
-  поднимает второй стенд, пишет Заявку на свой временный лист, читает её обратно и удаляет лист.
-  Без этих переменных тест пропускается.
 
 Какие сценарии покрыты и результат последнего прогона — [docs/test-results.md](docs/test-results.md).
 
@@ -126,7 +120,7 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
    ```
    DATABASE_URL=... uv run python -m scripts.migrate
    DATABASE_URL=... DEMO_MESSENGER_PAGE_ID=... DEMO_WHATSAPP_PHONE_NUMBER_ID=... \
-     TELEGRAM_CHAT_ID=... GOOGLE_SHEETS_SPREADSHEET_ID=... uv run python -m scripts.seed
+     uv run python -m scripts.seed
    ```
 6. API-пользователь n8n в EspoCRM (повтор безопасен, ключ тот же):
    ```
@@ -149,7 +143,7 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
    (передаются через stdin, на диск ноутбука не пишутся), импорт всех `n8n/workflows/*.json`,
    `publish:workflow` каждого и перезапуск n8n — вебхуки регистрируются только при старте.
    Повторять после каждой правки workflow.
-8. Вебхуки внешних сервисов — см. ниже: Meta и Telegram.
+8. Вебхук Meta — см. ниже. Telegram вебхука не держит: бот только шлёт алерты разработчикам.
 
 После правки `.env` на VPS — `make deploy` (n8n перечитает переменные при пересоздании).
 Версии образов: `N8N_VERSION`, `CADDY_VERSION`, `ESPOCRM_VERSION`, `POSTGRES_VERSION` в `.env`,
@@ -207,27 +201,11 @@ WhatsApp отвечает через Cloud API номера (`WHATSAPP_ACCESS_TO
 последнего сообщения Клиента ответ уходит свободным текстом. Позже уходит шаблон `news_update`:
 на pl, если Беседа на польском, иначе на en.
 
-### Telegram
+### Алерт «AI не отвечает»
 
-Бот пишет в группу Заказчика (`companies.telegram_chat_id`) и принимает нажатия кнопок
-через вебхук `https://n8n.n3spark.io/webhook/telegram`. Регистрация (на VPS, где лежат секреты):
-
-```
-ssh n3-vps
-cd uala
-TELEGRAM_BOT_TOKEN=$(grep '^TELEGRAM_BOT_TOKEN=' .env | cut -d= -f2-)
-TELEGRAM_WEBHOOK_SECRET=$(grep '^TELEGRAM_WEBHOOK_SECRET=' .env | cut -d= -f2-)
-curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
-  -d url=https://n8n.n3spark.io/webhook/telegram \
-  -d secret_token="$TELEGRAM_WEBHOOK_SECRET" \
-  -d 'allowed_updates=["callback_query"]'
-curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
-```
-
-`getWebhookInfo` должен показать этот URL и пустой `last_error_message`. Workflow
-`telegram-callback` отвечает 401 на запрос без заголовка `X-Telegram-Bot-Api-Secret-Token`,
-равного `TELEGRAM_WEBHOOK_SECRET`. У бота один вебхук: `setWebhook` заменяет прежний, поэтому
-боту нужен свой токен, не общий с другим сервисом.
+AI не ответил дважды подряд — бот (`TELEGRAM_BOT_TOKEN`) пишет в группу разработчиков
+`ALERT_TELEGRAM_CHAT_ID`: Заказчик, Клиент, последнее сообщение. Заказчик алерт не получает:
+Заявки и Передачи человеку он видит в EspoCRM. Бот только шлёт сообщения, вебхука у него нет.
 
 ### Retry
 
@@ -235,11 +213,9 @@ curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
 сразу: `curl -X POST https://n8n.n3spark.io/webhook/retry -H "X-Retry-Secret: $RETRY_WEBHOOK_SECRET"`
 (пустой секрет — ручной запуск закрыт).
 
-Retry берёт только то, что не менялось последние 2 минуты: свежее ещё доставляет основной поток.
+Алерт «AI не отвечает» retry дошлёт, если основной поток не отправил его за 2 минуты.
 Сообщение буфера без отметки об обработке retry берёт, если его взяли в работу больше 5 минут назад:
 основной поток с повторами вызова AI укладывается в две минуты.
-В таблицу дописываются только `qualified` Заявки; в Telegram — «Новая заявка» для `qualified`,
-сводка Передачи человеку для `needs_human` и недошедшие алерты «AI не отвечает».
 
 ## Правка workflow
 
