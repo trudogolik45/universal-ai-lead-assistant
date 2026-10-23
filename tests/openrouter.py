@@ -20,8 +20,10 @@ def assistant_reply(
     qualified: bool = False,
     needs_human: bool = False,
     handoff_reason: str | None = None,
+    appointment_start: str | None = None,
 ) -> Response:
-    """Ответ chat/completions, в content — JSON по схеме Ассистента. Неуказанные поля Заявки — null."""
+    """Ответ chat/completions, в content — JSON по схеме Ассистента. Неуказанные поля Заявки — null.
+    appointment_start — слот, в который Ассистент записывает Клиента (местное время «YYYY-MM-DD HH:MM»)."""
     content = {
         "reply": reply,
         "language": language,
@@ -31,6 +33,7 @@ def assistant_reply(
         "qualified": qualified,
         "needs_human": needs_human,
         "handoff_reason": handoff_reason,
+        "appointment_start": appointment_start,
     }
     return raw_reply(json.dumps(content))
 

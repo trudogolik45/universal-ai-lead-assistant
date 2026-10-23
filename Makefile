@@ -54,8 +54,8 @@ espocrm-api-user:
 		&& sed -i "/^ESPOCRM_API_KEY=/d" .env && echo "ESPOCRM_API_KEY=$$key" >> .env \
 		&& docker compose up -d n8n && echo "ESPOCRM_API_KEY записан, n8n пересоздан"'
 
-# Демо-База знаний AutoPro Service в EspoCRM (scripts/espocrm_knowledge.py). Повтор безопасен:
-# существующие записи и правки Заказчика не трогаются.
+# Демо-База знаний и рабочий календарь AutoPro Service в EspoCRM (scripts/espocrm_knowledge.py).
+# Повтор безопасен: существующие записи и правки Заказчика не трогаются.
 espocrm-knowledge:
 	ssh $(VPS) 'mkdir -p $(VPS_DIR)/app'
 	rsync -az pyproject.toml uv.lock scripts $(VPS):$(VPS_DIR)/app/

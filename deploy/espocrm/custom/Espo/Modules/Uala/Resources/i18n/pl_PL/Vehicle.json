@@ -6,11 +6,13 @@
         "licensePlate": "Numer rejestracyjny",
         "vin": "VIN",
         "contact": "Klient",
-        "leads": "Zgłoszenia"
+        "leads": "Zgłoszenia",
+        "meetings": "Wizyty"
     },
     "links": {
         "contact": "Klient",
-        "leads": "Zgłoszenia"
+        "leads": "Zgłoszenia",
+        "meetings": "Wizyty"
     },
     "labels": {
         "Create Vehicle": "Dodaj pojazd"

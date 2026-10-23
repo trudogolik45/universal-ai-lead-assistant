@@ -6,11 +6,13 @@
         "licensePlate": "License plate",
         "vin": "VIN",
         "contact": "Client",
-        "leads": "Leads"
+        "leads": "Leads",
+        "meetings": "Meetings"
     },
     "links": {
         "contact": "Client",
-        "leads": "Leads"
+        "leads": "Leads",
+        "meetings": "Meetings"
     },
     "labels": {
         "Create Vehicle": "Create Vehicle"

@@ -115,8 +115,9 @@ def test_message_for_unknown_page_is_ignored(db, fake, meta, client, company):
 
     assert response.status_code == 200
     stays(lambda: message_count(db) == 0)
-    assert fake.requests("/openrouter") == []
-    assert fake.requests("/meta") == []
+    # Только запросы об этом Сообщении: хвост обработки предыдущего теста может дойти до фейка уже здесь.
+    assert [r for r in fake.requests("/openrouter") if "Halo?" in r.body.decode()] == []
+    assert [r for r in fake.requests("/meta") if client in r.body.decode()] == []
 
 
 def test_page_echo_is_not_saved_as_client_message(db, meta, client, company):

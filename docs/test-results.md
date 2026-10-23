@@ -6,8 +6,8 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17-37-remove-legacy` (спека #17, #37 поверх `spec-17`), команда `uv run pytest -rs`.
-- Результат: **169 passed** за 1288 с, пропусков нет (тест настоящей Google-таблицы ушёл вместе с доставкой в неё).
+- Дата: 2026-10-23, ветка `spec-17` (#37, затем мерж #26 и #28), команда `uv run pytest`.
+- Результат: **190 passed** за 836 с, пропусков нет.
 
 ## Сценарии спеки → тесты
 
@@ -58,7 +58,9 @@
 | Хук ответа сотрудника в настоящей EspoCRM (#25): Сообщение сотрудника становится исходящим от сотрудника и вызывает n8n с текстом и адресом Клиента; Сообщения n8n обратно не уходят | `test_espocrm.py::test_employee_message_in_conversation_calls_n8n_with_text_and_client_address`, `test_messages_written_by_n8n_do_not_call_n8n_back` | passed |
 | Задача человеку (#24): Передача человеку создаёт Task со ссылкой на Беседу и сводкой на польском; назначение — команда `Administratorzy`, в ней активный сотрудник с наименьшим числом открытых задач; Ассистент молчит в Беседе, второй задачи нет; несозданную задачу создаёт retry | `test_handoff_task.py` (4) | passed |
 | Задача человеку в настоящей EspoCRM (#24): API-пользователь находит активных членов команды и считает открытые задачи запросами переходника; Task привязан к Беседе, назначенный сотрудник получает уведомление CRM; письмо о назначении Task включено | `test_espocrm.py::test_api_user_finds_active_team_members_as_crm_adapter_does`, `test_api_user_counts_open_tasks_of_employee_as_crm_adapter_does`, `test_handoff_task_links_to_conversation_and_notifies_assigned_employee`, `test_crm_emails_employee_about_assigned_task` | passed |
-| Фейк EspoCRM повторяет REST API: CRUD, обязательные поля, поиск `equals`/`in`/`linkedWith`, `total` сверх `maxSize`, телефон в международном формате, связи, 401 без ключа, 503 при недоступности CRM или одной сущности | `test_fake_espocrm.py` (16) | passed |
+| Запись в свободный слот (#28): слоты — по рабочим часам календаря без занятых Записей (отменённая слот не занимает), праздник календаря закрыт; Запись — Meeting в выбранный слот, связанный с Клиентом и Автомобилем, второй Записи нет; без телефона Ассистент сначала просит номер; без календаря время не подтверждается; два Клиента в один слот не попадают — второй получает просьбу выбрать другое время | `test_booking.py` (7) | passed |
+| Запись в настоящей EspoCRM (#28): API-пользователь читает рабочий календарь и его исключения запросами переходника, находит пересекающиеся со слотом Записи, ставит Meeting без исполнителя и связывает с Клиентом и Автомобилем; демо-календарь AutoPro заливается один раз и не затирает правки | `test_espocrm.py::test_api_user_reads_working_time_calendar_as_crm_adapter_does`, `test_api_user_finds_meetings_overlapping_slot`, `test_api_user_books_meeting_for_client_and_vehicle_without_assignee`, `test_demo_working_calendar_is_seeded_once_and_keeps_owner_edits` | passed |
+| Фейк EspoCRM повторяет REST API: CRUD, обязательные поля, поиск `equals`/`notEquals`/`in`/`lessThan`/`greaterThan`/`linkedWith`, `total` сверх `maxSize`, телефон в международном формате, связи (в том числе многие-ко-многим), 401 без ключа, 503 при недоступности CRM или одной сущности, медленная сущность | `test_fake_espocrm.py` (19) | passed |
 
 Флаки «не дождались за 30 с» в случайных тестах (запоздалый запрос предыдущего теста) — одна причина: фейк закрывал соединение первым, TIME_WAIT
 оставался в сети Docker Desktop, а n8n снова брал тот же порт к фейку. SYN терялся ~30–36 с, запрос

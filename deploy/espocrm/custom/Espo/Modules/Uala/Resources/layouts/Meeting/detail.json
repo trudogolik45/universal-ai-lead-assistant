@@ -1,0 +1,11 @@
+[
+    {
+        "rows": [
+            [{"name": "name"}, {"name": "parent"}],
+            [{"name": "status"}, {"name": "vehicle"}],
+            [{"name": "dateStart"}, {"name": "dateEnd"}],
+            [{"name": "duration"}, {"name": "reminders"}],
+            [{"name": "description"}]
+        ]
+    }
+]

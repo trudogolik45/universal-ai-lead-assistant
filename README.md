@@ -23,20 +23,23 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 |---|---|---|
 | `meta-webhook` | `POST /webhook/meta` | Подпись Meta → сообщения в буфер входящих (`inbox`, дубль по id сообщения отсекается) → 200 Meta → `process-inbox` |
 | `process-inbox` | вызов из других workflow | Сообщение из буфера через `handle-message`; дошло до конца — помечается обработанным, упало — остаётся в буфере |
-| `handle-message` | вызов из других workflow | Заказчик по странице или номеру → Сообщение в Беседу → База знаний из EspoCRM → OpenRouter → ответ Клиенту через `send-to-client`, Заявка, Передача человеку; входящее и ответ — в CRM через `write-message-to-crm`, Заявка — через `write-lead-to-crm`, Задача человеку — через `create-handoff-task` |
+| `handle-message` | вызов из других workflow | Заказчик по странице или номеру → Сообщение в Беседу → База знаний и свободные слоты из EspoCRM → OpenRouter → Запись в слот через `book-appointment` → ответ Клиенту через `send-to-client`, Заявка, Передача человеку; входящее и ответ — в CRM через `write-message-to-crm`, Заявка — через `write-lead-to-crm`, Задача человеку — через `create-handoff-task` |
 | `send-to-client` | вызов из других workflow | Текст Клиенту в Канал его Беседы: Send API Messenger Platform (Messenger, Instagram Direct) или WhatsApp Cloud API; вне окна 24 часов после сообщения Клиента Messenger и Instagram — с меткой `HUMAN_AGENT`, WhatsApp — шаблон `news_update` |
 | `write-message-to-crm` | вызов из других workflow | Сообщение из Postgres в Беседу Клиента в CRM через переходник; не вышло — остаётся недописанным (`messages.crm_message_id` пуст) для retry |
 | `write-lead-to-crm` | вызов из других workflow | Заявка из Postgres в CRM с Клиентом и Автомобилем через переходник; не вышло или Заявка изменилась во время записи — её дописывает retry (`crm_leads`) |
 | `employee-reply` | `POST /webhook/employee-reply` | Ответ сотрудника из EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа переходит в режим человека, Ассистент в ней молчит, текст — Клиенту через `send-to-client` |
 | `task-done` | `POST /webhook/task-done` | Сотрудник закрыл Задачу «Передача человеку» в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа снова у Ассистента, Заявка `collecting` или `qualified` по обязательным полям |
 | `create-handoff-task` | вызов из других workflow | Передача человеку → Задача человеку в CRM через переходник: сводка на польском, ссылка на Беседу; не вышло — остаётся без задачи (`leads.handoff_task_id` пуст) для retry |
-| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операции: `record_message` — найти или создать Беседу по Каналу и id Клиента, добавить Сообщение; `create_task` — Задача человеку (Task) к Беседе: вид → команда (`handoff` → `Administratorzy`), в команде — активный сотрудник с наименьшим числом открытых задач; `record_lead` — Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить |
+| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операции: `record_message` — найти или создать Беседу по Каналу и id Клиента, добавить Сообщение; `create_task` — Задача человеку (Task) к Беседе: вид → команда (`handoff` → `Administratorzy`), в команде — активный сотрудник с наименьшим числом открытых задач; `record_lead` — Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить, Запись Заявки — привязать к ним; `free_slots` — свободные слоты по рабочему календарю (`WorkingTimeCalendar`) и Записям (`Meeting`); `book_appointment` — Запись (`Meeting`) в слот, если он ещё свободен |
+| `book-appointment` | вызов из других workflow | Запись Клиента в выбранный Ассистентом слот: блокировка слота в Postgres (`slot_locks`) → Запись в CRM через переходник → `appointments`; слот занят — Записи нет |
 | `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram разработчиков (`ALERT_TELEGRAM_CHAT_ID`); Заказчик его не видит |
 | `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Повтор необработанных сообщений буфера, дозапись Сообщений, Заявок и Задач человеку в CRM, недошедших алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
 
 Рядом работает EspoCRM на своём Postgres (`deploy/espocrm`, ADR 0001 и 0002). В её модуле Uala
 есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`), Автомобиль (`Vehicle`)
-и База знаний (`KnowledgeItem`) — её Ассистент читает на каждое Сообщение.
+и База знаний (`KnowledgeItem`) — её Ассистент читает на каждое Сообщение. Запись — встроенная
+встреча `Meeting` со связью с Автомобилем; свободные слоты — по встроенному рабочему календарю
+(`WorkingTimeCalendar`), см. docs/knowledge-base.md.
 Заявка — встроенный `Lead` (по-польски «Zgłoszenie») со своими полями услуга (`service`), удобное время
 (`desiredTime`) и связями с Клиентом, Автомобилем и Беседой; текст Заявки Ассистент пишет по-польски.
 У Клиента (`Contact`) есть поле Согласие на рекламу (`marketingConsent`). n8n ходит в EspoCRM по
@@ -131,7 +134,8 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
    пересоздаёт n8n. Ключ не покидает VPS. Ещё он заводит группы сотрудников — команды
    `Administratorzy` и `Mechanicy` с ролью `Pracownicy`. Сотрудников в них добавляет Заказчик
    (Administration → Teams): Задача человеку достаётся только активному члену команды.
-   Демо-База знаний AutoPro Service в EspoCRM (повтор безопасен, правки Заказчика не затирает):
+   Демо-База знаний и рабочий календарь AutoPro Service в EspoCRM (повтор безопасен, правки
+   Заказчика не затирает):
    ```
    make espocrm-knowledge
    ```

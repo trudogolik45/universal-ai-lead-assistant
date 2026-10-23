@@ -1,0 +1,17 @@
+{
+    "fields": {
+        "assignedUser": {
+            "required": false
+        },
+        "vehicle": {
+            "type": "link"
+        }
+    },
+    "links": {
+        "vehicle": {
+            "type": "belongsTo",
+            "entity": "Vehicle",
+            "foreign": "meetings"
+        }
+    }
+}
