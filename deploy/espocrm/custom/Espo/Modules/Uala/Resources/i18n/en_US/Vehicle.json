@@ -5,10 +5,12 @@
         "year": "Year",
         "licensePlate": "License plate",
         "vin": "VIN",
-        "contact": "Client"
+        "contact": "Client",
+        "leads": "Leads"
     },
     "links": {
-        "contact": "Client"
+        "contact": "Client",
+        "leads": "Leads"
     },
     "labels": {
         "Create Vehicle": "Create Vehicle"

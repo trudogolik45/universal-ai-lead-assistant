@@ -5,10 +5,12 @@
         "year": "Rok produkcji",
         "licensePlate": "Numer rejestracyjny",
         "vin": "VIN",
-        "contact": "Klient"
+        "contact": "Klient",
+        "leads": "Zgłoszenia"
     },
     "links": {
-        "contact": "Klient"
+        "contact": "Klient",
+        "leads": "Zgłoszenia"
     },
     "labels": {
         "Create Vehicle": "Dodaj pojazd"

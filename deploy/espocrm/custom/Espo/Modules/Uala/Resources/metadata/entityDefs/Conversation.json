@@ -79,6 +79,11 @@
             "entity": "Team",
             "relationName": "entityTeam",
             "layoutRelationshipsDisabled": true
+        },
+        "leads": {
+            "type": "hasMany",
+            "entity": "Lead",
+            "foreign": "conversation"
         }
     },
     "collection": {

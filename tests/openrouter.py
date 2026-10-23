@@ -6,7 +6,9 @@ from tests.fake_server import Response
 
 COMPLETIONS_PATH = "/openrouter/chat/completions"
 
-LEAD_FIELDS = ("name", "contact", "service", "description", "desired_date")
+LEAD_FIELDS = (
+    "name", "phone", "contact", "vehicle_brand", "vehicle_model", "service", "description", "desired_date",
+)
 
 
 def assistant_reply(

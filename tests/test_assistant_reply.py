@@ -220,6 +220,41 @@ def test_qualified_from_ai_without_required_field_stays_collecting(db, fake, met
     assert lead(db)[-1] == ["contact"]
 
 
+AUTO_SERVICE_FIELDS = ["name", "phone", "vehicle_brand", "vehicle_model", "description", "desired_date"]
+
+
+def test_auto_service_lead_is_qualified_only_with_fields_set_by_company(db, fake, meta, client, company):
+    db.execute("update companies set required_fields = %s where id = %s", (AUTO_SERVICE_FIELDS, company))
+    respond_with(fake, assistant_reply(
+        lead_data={
+            "name": "Jan Kowalski",
+            "phone": "+48600123456",
+            "vehicle_brand": "Skoda",
+            "description": "Stuki w zawieszeniu",
+            "desired_date": "jutro po 16:00",
+        },
+        qualified=True,
+    ))
+
+    meta.post(messenger_payload(PAGE_ID, client, "Jan Kowalski, +48600123456, Skoda stuka, jutro po 16"))
+
+    eventually(lambda: sent_messages(fake))
+    system = completion_requests(fake)[0]["messages"][0]["content"]
+    assert "Required lead fields: name, phone, vehicle_brand, vehicle_model, description, desired_date" in system
+    assert db.execute("select status, missing_fields, phone, vehicle_brand from leads").fetchone() == (
+        "collecting", ["vehicle_model"], "+48600123456", "Skoda",
+    )
+
+
+def test_lead_is_collected_in_polish_whatever_client_language(db, fake, meta, client):
+    respond_with(fake, assistant_reply(language="de"))
+
+    meta.post(messenger_payload(PAGE_ID, client, "Mein Auto klopft beim Bremsen"))
+
+    system = eventually(lambda: completion_requests(fake))[0]["messages"][0]["content"]
+    assert "write service, description and desired_date in Polish whatever the client's language" in system
+
+
 def test_message_in_handoff_conversation_is_saved_without_ai(db, fake, meta, client, company):
     conversation_id = open_conversation(db, company, sender_id=client, status="handoff")
     create_lead(db, company, conversation_id)

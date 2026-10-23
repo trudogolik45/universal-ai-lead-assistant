@@ -110,3 +110,17 @@ def test_required_fields_must_be_lead_fields(db):
         db.execute(
             "update companies set required_fields = '{name,pesel}' where id = %s", (company,)
         )
+
+
+def test_auto_service_company_requires_phone_and_vehicle(db):
+    company = create_company(db)
+
+    db.execute(
+        "update companies set required_fields = '{name,phone,vehicle_brand,vehicle_model,description,desired_date}'"
+        " where id = %s",
+        (company,),
+    )
+
+    assert db.execute("select required_fields from companies").fetchone()[0] == [
+        "name", "phone", "vehicle_brand", "vehicle_model", "description", "desired_date",
+    ]

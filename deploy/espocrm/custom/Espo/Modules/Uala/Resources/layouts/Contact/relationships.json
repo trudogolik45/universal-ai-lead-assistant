@@ -1,6 +1,7 @@
 [
     "conversations",
     "vehicles",
+    "leads",
     "opportunities",
     "cases",
     "targetLists"

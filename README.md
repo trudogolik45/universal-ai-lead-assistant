@@ -24,18 +24,21 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 |---|---|---|
 | `meta-webhook` | `POST /webhook/meta` | Подпись Meta → сообщения в буфер входящих (`inbox`, дубль по id сообщения отсекается) → 200 Meta → `process-inbox` |
 | `process-inbox` | вызов из других workflow | Сообщение из буфера через `handle-message`; дошло до конца — помечается обработанным, упало — остаётся в буфере |
-| `handle-message` | вызов из других workflow | Заказчик по странице → Сообщение в Беседу → База знаний из EspoCRM → OpenRouter → ответ Клиенту, Заявка, Передача человеку; входящее и ответ — в CRM через `write-message-to-crm` |
+| `handle-message` | вызов из других workflow | Заказчик по странице → Сообщение в Беседу → База знаний из EspoCRM → OpenRouter → ответ Клиенту, Заявка, Передача человеку; входящее и ответ — в CRM через `write-message-to-crm`, Заявка — через `write-lead-to-crm` |
 | `write-message-to-crm` | вызов из других workflow | Сообщение из Postgres в Беседу Клиента в CRM через переходник; не вышло — остаётся недописанным (`messages.crm_message_id` пуст) для retry |
-| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операция `record_message`: найти или создать Беседу по Каналу и id Клиента, добавить Сообщение |
+| `write-lead-to-crm` | вызов из других workflow | Заявка из Postgres в CRM с Клиентом и Автомобилем через переходник; не вышло или Заявка изменилась во время записи — её дописывает retry (`crm_leads`) |
+| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операция `record_message`: найти или создать Беседу по Каналу и id Клиента, добавить Сообщение. Операция `record_lead`: Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить |
 | `deliver-lead` | вызов из других workflow | Заявка в Google-таблицу, затем в CRM-webhook |
 | `notify-lead` | вызов из других workflow | Уведомление о Заявке или Передаче человеку в группу Telegram |
 | `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram |
 | `telegram-callback` | `POST /webhook/telegram` | Кнопки «Вернуть ассистенту» и «Закрыть»; возврат с полной Заявкой доставляет и объявляет её |
-| `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Повтор необработанных сообщений буфера, дозапись Сообщений в CRM, недоставленных Заявок и алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
+| `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Повтор необработанных сообщений буфера, дозапись Сообщений и Заявок в CRM, недоставленных Заявок и алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
 
 Рядом работает EspoCRM на своём Postgres (`deploy/espocrm`, ADR 0001 и 0002). В её модуле Uala
 есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`), Автомобиль (`Vehicle`)
 и База знаний (`KnowledgeItem`) — её Ассистент читает на каждое Сообщение.
+Заявка — встроенный `Lead` (по-польски «Zgłoszenie») со своими полями услуга (`service`), удобное время
+(`desiredTime`) и связями с Клиентом, Автомобилем и Беседой; текст Заявки Ассистент пишет по-польски.
 У Клиента (`Contact`) есть поле Согласие на рекламу (`marketingConsent`). n8n ходит в EspoCRM по
 REST API под API-пользователем `n8n`, только через переходник `crm-adapter-espocrm`. Сообщения
 в Беседе упорядочены по времени отправки (`Message.sentAt`), а не записи: дописанное retry встаёт

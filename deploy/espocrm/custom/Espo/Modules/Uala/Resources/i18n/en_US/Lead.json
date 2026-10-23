@@ -1,0 +1,17 @@
+{
+    "fields": {
+        "service": "Service",
+        "desiredTime": "Preferred time",
+        "contact": "Client",
+        "vehicle": "Vehicle",
+        "conversation": "Conversation"
+    },
+    "links": {
+        "contact": "Client",
+        "vehicle": "Vehicle",
+        "conversation": "Conversation"
+    },
+    "tooltips": {
+        "desiredTime": "Time the client asked for. It is not a confirmed appointment."
+    }
+}

@@ -1,0 +1,17 @@
+{
+    "fields": {
+        "service": "Usługa",
+        "desiredTime": "Dogodny termin",
+        "contact": "Klient",
+        "vehicle": "Pojazd",
+        "conversation": "Rozmowa"
+    },
+    "links": {
+        "contact": "Klient",
+        "vehicle": "Pojazd",
+        "conversation": "Rozmowa"
+    },
+    "tooltips": {
+        "desiredTime": "Termin, który podał klient. Nie jest to potwierdzona wizyta."
+    }
+}

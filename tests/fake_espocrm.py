@@ -7,6 +7,7 @@
 """
 
 import json
+import re
 import threading
 import uuid
 from contextlib import contextmanager
@@ -23,14 +24,25 @@ REQUIRED = {
     "Conversation": ("name", "channel", "senderId"),
     "Message": ("conversationId", "direction", "author", "text"),
     "Vehicle": ("name",),
+    "Contact": ("lastName",),
+    "Lead": ("lastName",),
 }
+
+# Телефон настоящая EspoCRM принимает только в международном формате (+48600123456), иначе 400.
+PHONE = re.compile(r"\+[0-9 ()-]+")
 
 # Связь hasMany (сущность, связь) → (связанная сущность, поле со ссылкой на родителя).
 LINKS = {
     ("Conversation", "messages"): ("Message", "conversationId"),
     ("Contact", "conversations"): ("Conversation", "contactId"),
     ("Contact", "vehicles"): ("Vehicle", "contactId"),
+    ("Contact", "leads"): ("Lead", "contactId"),
+    ("Vehicle", "leads"): ("Lead", "vehicleId"),
+    ("Conversation", "leads"): ("Lead", "conversationId"),
 }
+
+
+ALL = "*"
 
 
 class FakeEspoCrm:
@@ -40,21 +52,22 @@ class FakeEspoCrm:
         self._api_key = api_key
         self._lock = threading.Lock()
         self._records: dict[str, dict[str, dict]] = {}
-        self._available = True
+        # Сущности, на которые CRM отвечает 503; ALL — на все.
+        self._down: set[str] = set()
 
     def reset(self):
         with self._lock:
             self._records.clear()
-            self._available = True
+            self._down = set()
 
     @contextmanager
-    def unavailable(self):
-        """CRM лежит: на любой запрос 503, пока блок не закончится."""
-        self._available = False
+    def unavailable(self, entity: str = ALL):
+        """CRM лежит: на любой запрос (или на запросы одной сущности) 503, пока блок не закончится."""
+        self._down = {entity}
         try:
             yield
         finally:
-            self._available = True
+            self._down = set()
 
     def records(self, entity: str) -> list[dict]:
         """Записи сущности в порядке создания."""
@@ -66,12 +79,12 @@ class FakeEspoCrm:
             return self._related(entity, record_id, link, order_by)
 
     def __call__(self, request: Request) -> Response:
-        if not self._available:
+        url = urlsplit(request.path)
+        parts = url.path.removeprefix(self.PREFIX).split("/")
+        if self._down & {ALL, parts[0]}:
             return Response(503, None)
         if header(request, "X-Api-Key") != self._api_key:
             return Response(401, None)
-        url = urlsplit(request.path)
-        parts = url.path.removeprefix(self.PREFIX).split("/")
         params = {key: values[-1] for key, values in parse_qs(url.query).items()}
         with self._lock:
             return self._route(request.method, parts, params, request.body)
@@ -91,7 +104,7 @@ class FakeEspoCrm:
         return Response(404, None)
 
     def _create(self, entity: str, data: dict) -> Response:
-        if any(data.get(field) in (None, "") for field in REQUIRED.get(entity, ())):
+        if any(data.get(field) in (None, "") for field in REQUIRED.get(entity, ())) or not valid(data):
             return Response(400, None)
         record = {**data, "id": uuid.uuid4().hex[:17], "createdAt": now()}
         self._records.setdefault(entity, {})[record["id"]] = record
@@ -107,6 +120,8 @@ class FakeEspoCrm:
         record = self._records.get(entity, {}).get(record_id)
         if record is None:
             return Response(404, None)
+        if not valid(data):
+            return Response(400, None)
         record.update(data)
         return Response(200, dict(record))
 
@@ -123,6 +138,11 @@ class FakeEspoCrm:
 
 def header(request: Request, name: str) -> str | None:
     return next((v for k, v in request.headers.items() if k.lower() == name.lower()), None)
+
+
+def valid(data: dict) -> bool:
+    phone = data.get("phoneNumber")
+    return phone in (None, "") or bool(PHONE.fullmatch(phone))
 
 
 def search_params(params: dict) -> dict:

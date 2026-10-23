@@ -57,7 +57,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        440,
+        660,
         300
       ],
       "parameters": {
@@ -113,7 +113,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        660,
+        880,
         300
       ],
       "parameters": {
@@ -129,6 +129,39 @@
           "name": "Supabase"
         }
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c22h",
+              "leftValue": "={{ !!$json.message_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e1-0022-4000-8000-000000000006",
+      "name": "Message claimed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
     }
   ],
   "connections": {
@@ -147,7 +180,7 @@
       "main": [
         [
           {
-            "node": "Record in CRM",
+            "node": "Message claimed",
             "type": "main",
             "index": 0
           }
@@ -159,6 +192,17 @@
         [
           {
             "node": "Mark written",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message claimed": {
+      "main": [
+        [
+          {
+            "node": "Record in CRM",
             "type": "main",
             "index": 0
           }

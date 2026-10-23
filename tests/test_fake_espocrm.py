@@ -120,6 +120,22 @@ def test_unavailable_crm_answers_503_and_keeps_no_records(api, crm):
     assert crm.records("Conversation") == []
 
 
+def test_crm_unavailable_for_one_entity_answers_others(api, crm):
+    with crm.unavailable("Lead"):
+        lead = api.post("Lead", json={"lastName": "Kowalski"})
+        contact = api.post("Contact", json={"lastName": "Kowalski"})
+
+    assert (lead.status_code, contact.status_code) == (503, 200)
+    assert crm.records("Lead") == []
+
+
+def test_phone_without_country_code_is_rejected_like_real_crm(api, crm):
+    local = api.post("Lead", json={"lastName": "Kowalski", "phoneNumber": "600123456"})
+    international = api.post("Lead", json={"lastName": "Kowalski", "phoneNumber": "+48600123456"})
+
+    assert (local.status_code, international.status_code) == (400, 200)
+
+
 def test_explicit_route_overrides_mounted_fake(server, api):
     server.respond("GET", "/espocrm/api/v1/KnowledgeItem", Response(500))
 

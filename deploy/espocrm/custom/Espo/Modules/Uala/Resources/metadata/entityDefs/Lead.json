@@ -1,0 +1,39 @@
+{
+    "fields": {
+        "service": {
+            "type": "varchar",
+            "maxLength": 255
+        },
+        "desiredTime": {
+            "type": "varchar",
+            "maxLength": 255,
+            "tooltip": true
+        },
+        "contact": {
+            "type": "link"
+        },
+        "vehicle": {
+            "type": "link"
+        },
+        "conversation": {
+            "type": "link"
+        }
+    },
+    "links": {
+        "contact": {
+            "type": "belongsTo",
+            "entity": "Contact",
+            "foreign": "leads"
+        },
+        "vehicle": {
+            "type": "belongsTo",
+            "entity": "Vehicle",
+            "foreign": "leads"
+        },
+        "conversation": {
+            "type": "belongsTo",
+            "entity": "Conversation",
+            "foreign": "leads"
+        }
+    }
+}
