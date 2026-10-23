@@ -3,11 +3,13 @@
         "channel": "Channel",
         "senderId": "Sender ID",
         "contact": "Client",
-        "messages": "Messages"
+        "messages": "Messages",
+        "leads": "Leads"
     },
     "links": {
         "contact": "Client",
         "messages": "Messages",
+        "leads": "Leads",
         "tasks": "Tasks"
     },
     "options": {

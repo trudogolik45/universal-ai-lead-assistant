@@ -3,11 +3,13 @@
         "channel": "Kanał",
         "senderId": "ID nadawcy",
         "contact": "Klient",
-        "messages": "Wiadomości"
+        "messages": "Wiadomości",
+        "leads": "Zgłoszenia"
     },
     "links": {
         "contact": "Klient",
         "messages": "Wiadomości",
+        "leads": "Zgłoszenia",
         "tasks": "Zadania"
     },
     "options": {

@@ -8,6 +8,7 @@
 """
 
 import json
+import re
 import threading
 import uuid
 from contextlib import contextmanager
@@ -26,13 +27,21 @@ REQUIRED = {
     "Conversation": ("name", "channel", "senderId"),
     "Message": ("conversationId", "direction", "author", "text"),
     "Vehicle": ("name",),
+    "Contact": ("lastName",),
+    "Lead": ("lastName",),
 }
+
+# Телефон настоящая EspoCRM принимает только в международном формате (+48600123456), иначе 400.
+PHONE = re.compile(r"\+[0-9 ()-]+")
 
 # Связь hasMany (сущность, связь) → (связанная сущность, поле со ссылкой на родителя).
 LINKS = {
     ("Conversation", "messages"): ("Message", "conversationId"),
     ("Contact", "conversations"): ("Conversation", "contactId"),
     ("Contact", "vehicles"): ("Vehicle", "contactId"),
+    ("Contact", "leads"): ("Lead", "contactId"),
+    ("Vehicle", "leads"): ("Lead", "vehicleId"),
+    ("Conversation", "leads"): ("Lead", "conversationId"),
 }
 
 
@@ -100,7 +109,7 @@ class FakeEspoCrm:
         return Response(404, None)
 
     def _create(self, entity: str, data: dict) -> Response:
-        if any(data.get(field) in (None, "") for field in REQUIRED.get(entity, ())):
+        if any(data.get(field) in (None, "") for field in REQUIRED.get(entity, ())) or not valid(data):
             return Response(400, None)
         return Response(200, self._store(entity, data))
 
@@ -119,6 +128,8 @@ class FakeEspoCrm:
         record = self._records.get(entity, {}).get(record_id)
         if record is None:
             return Response(404, None)
+        if not valid(data):
+            return Response(400, None)
         record.update(data)
         return Response(200, dict(record))
 
@@ -137,6 +148,11 @@ class FakeEspoCrm:
 
 def header(request: Request, name: str) -> str | None:
     return next((v for k, v in request.headers.items() if k.lower() == name.lower()), None)
+
+
+def valid(data: dict) -> bool:
+    phone = data.get("phoneNumber")
+    return phone in (None, "") or bool(PHONE.fullmatch(phone))
 
 
 def search_params(params: dict) -> dict:

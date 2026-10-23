@@ -120,6 +120,60 @@ def test_api_user_finds_client_vehicles(espocrm):
     assert [(v["brand"], v["model"], v["year"]) for v in vehicles] == [("Toyota", "Corolla", 2015)]
 
 
+def test_api_user_writes_lead_of_client_with_vehicle_in_conversation(espocrm):
+    conversation = create_conversation(espocrm, "psid-400")
+    client_id = conversation["contactId"]
+    vehicle = espocrm.api.create(
+        "Vehicle", {"name": "Skoda Octavia", "brand": "Skoda", "model": "Octavia", "contactId": client_id}
+    )
+
+    created = espocrm.api.create(
+        "Lead",
+        {
+            "firstName": "Jan",
+            "lastName": "Kowalski",
+            "phoneNumber": "+48600123456",
+            "description": "Stuki w zawieszeniu przy hamowaniu",
+            "service": "Diagnostyka zawieszenia",
+            "desiredTime": "jutro po 16:00",
+            "contactId": client_id,
+            "vehicleId": vehicle["id"],
+            "conversationId": conversation["id"],
+        },
+    )
+    espocrm.api.update("Lead", created["id"], {"desiredTime": "w piątek rano"})
+
+    lead = espocrm.api.read("Lead", created["id"])
+    assert (lead["service"], lead["desiredTime"], lead["phoneNumber"], lead["status"]) == (
+        "Diagnostyka zawieszenia",
+        "w piątek rano",
+        "+48600123456",
+        "New",
+    )
+    assert [r["id"] for r in espocrm.api.related("Contact", client_id, "leads")] == [created["id"]]
+    assert [r["id"] for r in espocrm.api.related("Vehicle", vehicle["id"], "leads")] == [created["id"]]
+    assert [r["id"] for r in espocrm.api.related("Conversation", conversation["id"], "leads")] == [created["id"]]
+
+
+def test_crm_refuses_lead_and_client_without_last_name_or_with_phone_without_country_code(espocrm):
+    """Поэтому переходник CRM подставляет имя Беседы вместо неизвестного имени
+    и не пишет телефон не в международном формате."""
+    headers = {"X-Skip-Duplicate-Check": "true"}
+
+    refused = [
+        espocrm.api.http.post(entity, json=data, headers=headers).status_code
+        for entity, data in (
+            ("Lead", {"description": "Stuki w zawieszeniu"}),
+            ("Contact", {"firstName": "Jan"}),
+            ("Lead", {"lastName": "Kowalski", "phoneNumber": "600123456"}),
+        )
+    ]
+    accepted = espocrm.api.http.post("Lead", json={"lastName": "Kowalski", "phoneNumber": "+48600123456"}, headers=headers)
+
+    assert refused == [400, 400, 400]
+    assert accepted.status_code == 200
+
+
 def test_client_has_no_marketing_consent_until_given(espocrm):
     client = espocrm.api.create("Contact", {"firstName": "Piotr", "lastName": "Zieliński"})
     assert espocrm.api.read("Contact", client["id"])["marketingConsent"] is False

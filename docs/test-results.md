@@ -6,8 +6,11 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17-24-handoff-task`, команда `uv run pytest -rs`.
-- Результат: **165 passed, 1 skipped** за 1318 с (хост под нагрузкой, load average ~40–60).
+- Дата: 2026-10-23, ветка `spec-17-22-lead-contact-vehicle` (после мержа #24), команда `uv run pytest -rs`.
+- Результат: **176 passed, 1 failed, 1 skipped** за 1875 с (хост под нагрузкой, load average ~30).
+  Упал `test_assistant_reply.py::test_deleted_client_returns_as_stranger_without_old_history`: второй
+  ответ Клиенту ушёл раньше второго запроса к AI в журнале фейка — хвост соседнего теста под нагрузкой;
+  перепрогнан отдельно вместе с новыми тестами #22: passed.
 - Skipped: `tests/test_lead_delivery_google.py::test_qualified_lead_row_is_read_back_from_real_spreadsheet` —
   запись в настоящую Google-таблицу и чтение обратно. Нужны `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_SHEETS_TEST_SPREADSHEET_ID`; service account и
@@ -60,9 +63,12 @@
 | База знаний в настоящей EspoCRM (#23): API-пользователь читает её тем же запросом, что n8n, и сразу видит правку; менять не может; виды записей ограничены; демо-база AutoPro заливается один раз и не затирает правки | `test_espocrm.py::test_api_user_reads_knowledge_base_as_assistant_does`, `test_owner_edit_in_crm_is_read_by_api_user_right_away`, `test_api_user_cannot_change_knowledge_base`, `test_knowledge_kind_is_service_hours_company_faq_or_rule`, `test_demo_knowledge_base_is_seeded_once_and_keeps_owner_edits` | passed |
 | Беседа в CRM (#21): входящее и ответ Ассистента в одной Беседе, следующее Сообщение в ту же Беседу, недоступная CRM не теряет Сообщения — retry дописывает после восстановления, без дублей | `test_crm_conversation.py` (4) | passed |
 | Беседа в настоящей EspoCRM (#21): Беседа находится по Каналу и id Клиента запросом переходника, Сообщения упорядочены по времени отправки | `test_espocrm.py::test_api_user_finds_conversation_by_channel_and_sender_as_crm_adapter_does`, `test_conversation_messages_are_ordered_by_sent_time_not_by_write_time` | passed |
+| Заявка, Клиент и Автомобиль в CRM (#22): Клиент находится по Каналу и отправителю через Беседу, Заявка и Автомобиль обновляются по ходу Беседы, вернувшийся Клиент — новая Заявка у того же Клиента, неизвестное имя и телефон без кода страны Заявку не блокируют, недоступная CRM не теряет Заявку — retry дописывает без дублей | `test_crm_lead.py` (6) | passed |
+| Обязательные поля автосервиса задаёт Заказчик (#22), Заявка — по-польски | `test_assistant_reply.py::test_auto_service_lead_is_qualified_only_with_fields_set_by_company`, `test_assistant_reply.py::test_lead_is_collected_in_polish_whatever_client_language`, `test_schema.py::test_auto_service_company_requires_phone_and_vehicle` | passed |
+| Заявка в настоящей EspoCRM (#22): связи с Клиентом, Автомобилем и Беседой, поля услуга и удобное время; без фамилии и с телефоном без кода страны CRM отказывает | `test_espocrm.py::test_api_user_writes_lead_of_client_with_vehicle_in_conversation`, `test_espocrm.py::test_crm_refuses_lead_and_client_without_last_name_or_with_phone_without_country_code` | passed |
 | Задача человеку (#24): Передача человеку создаёт Task со ссылкой на Беседу и сводкой на польском; назначение — команда `Administratorzy`, в ней активный сотрудник с наименьшим числом открытых задач; Ассистент молчит в Беседе, второй задачи нет; несозданную задачу создаёт retry | `test_handoff_task.py` (4) | passed |
 | Задача человеку в настоящей EspoCRM (#24): API-пользователь находит активных членов команды и считает открытые задачи запросами переходника; Task привязан к Беседе, назначенный сотрудник получает уведомление CRM; письмо о назначении Task включено | `test_espocrm.py::test_api_user_finds_active_team_members_as_crm_adapter_does`, `test_api_user_counts_open_tasks_of_employee_as_crm_adapter_does`, `test_handoff_task_links_to_conversation_and_notifies_assigned_employee`, `test_crm_emails_employee_about_assigned_task` | passed |
-| Фейк EspoCRM повторяет REST API: CRUD, обязательные поля, поиск `equals`/`in`/`linkedWith`, `total` сверх `maxSize`, связи, 401 без ключа, 503 при недоступности CRM или одной сущности | `test_fake_espocrm.py` (15) | passed |
+| Фейк EspoCRM повторяет REST API: CRUD, обязательные поля, поиск `equals`/`in`/`linkedWith`, `total` сверх `maxSize`, телефон в международном формате, связи, 401 без ключа, 503 при недоступности CRM или одной сущности | `test_fake_espocrm.py` (16) | passed |
 
 Флаки «не дождались за 30 с» в случайных тестах и `test_crm_webhook_is_not_called_when_not_set`
 (запоздалый CRM POST предыдущего теста) — одна причина: фейк закрывал соединение первым, TIME_WAIT

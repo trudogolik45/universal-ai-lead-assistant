@@ -17,6 +17,11 @@
             "type": "hasMany",
             "entity": "Vehicle",
             "foreign": "contact"
+        },
+        "leads": {
+            "type": "hasMany",
+            "entity": "Lead",
+            "foreign": "contact"
         }
     }
 }

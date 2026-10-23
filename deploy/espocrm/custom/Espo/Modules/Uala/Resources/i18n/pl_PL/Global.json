@@ -3,12 +3,14 @@
         "Conversation": "Rozmowa",
         "Message": "Wiadomość",
         "Vehicle": "Pojazd",
-        "KnowledgeItem": "Wpis bazy wiedzy"
+        "KnowledgeItem": "Wpis bazy wiedzy",
+        "Lead": "Zgłoszenie"
     },
     "scopeNamesPlural": {
         "Conversation": "Rozmowy",
         "Message": "Wiadomości",
         "Vehicle": "Pojazdy",
-        "KnowledgeItem": "Baza wiedzy"
+        "KnowledgeItem": "Baza wiedzy",
+        "Lead": "Zgłoszenia"
     }
 }

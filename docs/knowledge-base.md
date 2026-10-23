@@ -49,13 +49,17 @@ make espocrm-knowledge
 ## Обязательные поля (`companies.required_fields`)
 
 Поля Заявки, без которых она не становится `qualified`. Допустимы только поля Заявки:
-`name`, `contact`, `service`, `description`, `desired_date`. По умолчанию `{name,contact,service}`.
+`name`, `phone` (телефон, международный формат `+48…`), `contact` (другой контакт, e-mail),
+`vehicle_brand`, `vehicle_model` (марка и модель Автомобиля), `service`, `description`
+(что случилось), `desired_date` (удобное время). По умолчанию `{name,contact,service}`.
 
 Список считает сервер, а не AI: Заявка с `qualified` от AI, но без обязательного поля, остаётся
 `collecting`, недостающие поля — в `leads.missing_fields`. Ассистент дозапрашивает их у Клиента.
 
+Набор автосервиса (спека #17: имя, телефон, марка и модель, что случилось, удобное время):
+
 ```sql
-update companies set required_fields = '{name,contact,service,desired_date}'
+update companies set required_fields = '{name,phone,vehicle_brand,vehicle_model,description,desired_date}'
 where slug = 'uniwersalny-serwis';
 ```
 

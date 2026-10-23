@@ -548,6 +548,72 @@
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Заявки, не дописанные в CRM: запись упала (CRM лежала, сбой n8n) или Заявка изменилась во время записи.\n-- Взятые в работу меньше 5 минут назад ещё пишет основной поток. Заявку без попытки записи\n-- (Ассистент ещё не ответил) в CRM писать нечего.\nselect c.lead_id from crm_leads c\njoin leads l on l.id = c.lead_id\nwhere (c.written_at is null or c.written_at < l.updated_at)\n  and (c.claimed_at is null or c.claimed_at < now() - interval '5 minutes')\norder by l.updated_at\nlimit 200",
+        "options": {}
+      },
+      "id": "c7d2a1e3-0022-4000-8000-000000000001",
+      "name": "Find leads not in CRM",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        1500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e3-0022-4000-8000-000000000002",
+      "name": "Write lead to CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        1500
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmWriteLed",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}"
+          },
+          "matchingColumns": [
+            "lead_id"
+          ],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -634,6 +700,11 @@
             "node": "Find handoffs without task",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Find leads not in CRM",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -703,6 +774,17 @@
         [
           {
             "node": "Create handoff task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find leads not in CRM": {
+      "main": [
+        [
+          {
+            "node": "Write lead to CRM",
             "type": "main",
             "index": 0
           }

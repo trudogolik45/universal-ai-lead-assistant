@@ -1,0 +1,213 @@
+{
+  "id": "uala0crmWriteLed",
+  "name": "Write lead to CRM",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "lead_id",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "c7d2a1e1-0022-4000-8000-000000000001",
+      "name": "Lead to write",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Заявку не пишет в CRM другой вызов (свежая попытка моложе 5 минут). Строки нет — уже пишется: стоп;\n-- изменения, пришедшие во время записи, допишет retry. version — updated_at записываемой Заявки.\nwith claimed as (\n  insert into crm_leads (lead_id, claimed_at)\n  select id, now() from leads where id = nullif($1, '')::uuid\n  on conflict (lead_id) do update set claimed_at = now()\n  where crm_leads.claimed_at is null or crm_leads.claimed_at < now() - interval '5 minutes'\n  returning lead_id, crm_lead_id, crm_vehicle_id\n)\nselect c.lead_id, c.crm_lead_id, c.crm_vehicle_id, l.updated_at::text as version, v.channel, v.sender_id,\n  l.name, l.phone, l.vehicle_brand, l.vehicle_model, l.service, l.description, l.desired_date\nfrom claimed c\njoin leads l on l.id = c.lead_id\njoin conversations v on v.id = l.conversation_id",
+        "options": {
+          "queryReplacement": "={{ [$json.lead_id] }}"
+        }
+      },
+      "id": "c7d2a1e1-0022-4000-8000-000000000002",
+      "name": "Claim lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e1-0022-4000-8000-000000000003",
+      "name": "Record lead in CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmAdapter0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "record_lead",
+            "data": "={{ { channel: $json.channel, sender_id: $json.sender_id, crm_lead_id: $json.crm_lead_id, crm_vehicle_id: $json.crm_vehicle_id, name: $json.name, phone: $json.phone, vehicle_brand: $json.vehicle_brand, vehicle_model: $json.vehicle_model, service: $json.service, description: $json.description, desired_date: $json.desired_date } }}"
+          },
+          "matchingColumns": [
+            "operation",
+            "data"
+          ],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Записанная версия Заявки и id в CRM; claimed_at снят: следующее изменение пишется сразу.\nupdate crm_leads set crm_lead_id = $2, crm_vehicle_id = nullif($3, ''), written_at = $4::timestamptz, claimed_at = null\nwhere lead_id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [$('Claim lead').item.json.lead_id, $json.crm_lead_id, $json.crm_vehicle_id || '', $('Claim lead').item.json.version] }}"
+        }
+      },
+      "id": "c7d2a1e1-0022-4000-8000-000000000004",
+      "name": "Mark lead written",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c22g",
+              "leftValue": "={{ !!$json.lead_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e1-0022-4000-8000-000000000005",
+      "name": "Lead claimed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Lead to write": {
+      "main": [
+        [
+          {
+            "node": "Claim lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim lead": {
+      "main": [
+        [
+          {
+            "node": "Lead claimed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record lead in CRM": {
+      "main": [
+        [
+          {
+            "node": "Mark lead written",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead claimed": {
+      "main": [
+        [
+          {
+            "node": "Record lead in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
