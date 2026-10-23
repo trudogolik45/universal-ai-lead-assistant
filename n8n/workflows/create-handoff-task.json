@@ -1,0 +1,194 @@
+{
+  "id": "uala0handoffTask",
+  "name": "Create handoff task",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "d4e5f6a0-0000-4000-8000-000000000001",
+      "name": "Lead handed off",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "lead_id",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d4e5f6a0-0000-4000-8000-000000000002",
+      "name": "Claim lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Передача человеку ещё без Задачи в CRM и не в работе у другого вызова (свежая попытка моложе 5 минут).\n-- Строки нет — задача уже создана, создаётся или Беседу вернули Ассистенту: поток останавливается.\nupdate leads l set handoff_task_claimed_at = now()\nfrom conversations v\nwhere l.id = nullif($1, '')::uuid and v.id = l.conversation_id\n  and l.status = 'needs_human' and l.handoff_task_id is null\n  and (l.handoff_task_claimed_at is null or l.handoff_task_claimed_at < now() - interval '5 minutes')\nreturning l.id as lead_id, v.channel, v.sender_id, l.handoff_reason,\n  l.name, l.contact, l.service, l.description, l.desired_date,\n  (select m.text from messages m where m.conversation_id = v.id and m.direction = 'in'\n   order by m.created_at desc limit 1) as last_message",
+        "options": {
+          "queryReplacement": "={{ [$json.lead_id] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "d4e5f6a0-0000-4000-8000-000000000003",
+      "name": "Task summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Сводка Задачи человеку на польском: её читают сотрудники Заказчика. Последнее Сообщение Клиента —\n// как есть, на его языке; ссылка на Беседу — родитель задачи в CRM.\nconst CHANNELS = { messenger: 'Messenger', instagram: 'Instagram', whatsapp: 'WhatsApp', call: 'Telefon' };\nconst LEAD_LABELS = { name: 'Imię', contact: 'Kontakt', service: 'Usługa', description: 'Opis', desired_date: 'Termin' };\nconst lead = $json;\nconst client = lead.name || `${CHANNELS[lead.channel]} · ${lead.sender_id}`;\nconst known = Object.entries(LEAD_LABELS).filter(([field]) => lead[field]).map(([field, label]) => `${label}: ${lead[field]}`);\nconst description = [\n  `Powód: ${lead.handoff_reason || 'klient prosi o kontakt z człowiekiem'}`,\n  `Kanał: ${CHANNELS[lead.channel]}`,\n  ...known,\n  `Ostatnia wiadomość klienta: ${lead.last_message}`,\n].join('\\n');\nreturn { json: { name: `Przekazanie rozmowy: ${client}`, description } };"
+      }
+    },
+    {
+      "id": "d4e5f6a0-0000-4000-8000-000000000004",
+      "name": "Create task in CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmAdapter0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "create_task",
+            "data": "={{ { kind: 'handoff', channel: $('Claim lead').item.json.channel, sender_id: $('Claim lead').item.json.sender_id, name: $json.name, description: $json.description } }}"
+          },
+          "matchingColumns": [
+            "operation",
+            "data"
+          ],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "d4e5f6a0-0000-4000-8000-000000000005",
+      "name": "Mark created",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update leads set handoff_task_id = $2 where id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [$('Claim lead').item.json.lead_id, $json.crm_task_id] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Lead handed off": {
+      "main": [
+        [
+          {
+            "node": "Claim lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim lead": {
+      "main": [
+        [
+          {
+            "node": "Task summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task summary": {
+      "main": [
+        [
+          {
+            "node": "Create task in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create task in CRM": {
+      "main": [
+        [
+          {
+            "node": "Mark created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

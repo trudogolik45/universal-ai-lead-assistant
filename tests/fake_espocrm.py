@@ -1,7 +1,8 @@
-"""Фейк REST API EspoCRM в фейк-сервере: записи в памяти, CRUD, обязательные поля, поиск по `equals`, связи.
+"""Фейк REST API EspoCRM в фейк-сервере: записи в памяти, CRUD, обязательные поля, поиск (`equals`, `in`, `linkedWith`), связи.
 
 Подключён к фейк-серверу фикстурой `fake_server` (префикс /espocrm, env n8n ESPOCRM_BASE_URL).
-Тест читает записанное через `records(entity)` / `related(...)`, недоступность CRM — `unavailable()`.
+Тест читает записанное через `records(entity)` / `related(...)`, заводит своё через `add(...)`,
+недоступность CRM или одной сущности — `unavailable([entity])`.
 Ответы повторяют настоящую EspoCRM на те же запросы (контракт — tests/test_espocrm.py);
 новый вид связи — строка в LINKS.
 """
@@ -17,6 +18,8 @@ from tests.fake_server import Request, Response
 
 # Значение из docker-compose.test.yml (ESPOCRM_API_KEY n8n стенда).
 API_KEY = "test-espocrm-key"
+# unavailable() без сущности: лежит вся CRM.
+ALL = "*"
 
 # Обязательные поля (entityDefs модуля Uala): без них настоящая EspoCRM отвечает 400.
 REQUIRED = {
@@ -40,21 +43,27 @@ class FakeEspoCrm:
         self._api_key = api_key
         self._lock = threading.Lock()
         self._records: dict[str, dict[str, dict]] = {}
-        self._available = True
+        # Сущности, на запросы к которым CRM отвечает 503; ALL — вся CRM.
+        self._unavailable: set[str] = set()
 
     def reset(self):
         with self._lock:
             self._records.clear()
-            self._available = True
+            self._unavailable.clear()
 
     @contextmanager
-    def unavailable(self):
-        """CRM лежит: на любой запрос 503, пока блок не закончится."""
-        self._available = False
+    def unavailable(self, entity: str = ALL):
+        """CRM (или одна её сущность) лежит: 503, пока блок не закончится."""
+        self._unavailable.add(entity)
         try:
             yield
         finally:
-            self._available = True
+            self._unavailable.discard(entity)
+
+    def add(self, entity: str, data: dict) -> dict:
+        """Запись, заведённая в CRM человеком (сотрудник, команда, задача), а не через n8n."""
+        with self._lock:
+            return self._store(entity, data)
 
     def records(self, entity: str) -> list[dict]:
         """Записи сущности в порядке создания."""
@@ -66,12 +75,12 @@ class FakeEspoCrm:
             return self._related(entity, record_id, link, order_by)
 
     def __call__(self, request: Request) -> Response:
-        if not self._available:
+        url = urlsplit(request.path)
+        parts = url.path.removeprefix(self.PREFIX).split("/")
+        if self._unavailable & {ALL, parts[0]}:
             return Response(503, None)
         if header(request, "X-Api-Key") != self._api_key:
             return Response(401, None)
-        url = urlsplit(request.path)
-        parts = url.path.removeprefix(self.PREFIX).split("/")
         params = {key: values[-1] for key, values in parse_qs(url.query).items()}
         with self._lock:
             return self._route(request.method, parts, params, request.body)
@@ -81,7 +90,7 @@ class FakeEspoCrm:
             case "POST", [entity]:
                 return self._create(entity, json.loads(body or b"{}"))
             case "GET", [entity]:
-                return Response(200, as_list(self._search(entity, search_params(params))))
+                return Response(200, self._search(entity, search_params(params)))
             case "GET", [entity, record_id]:
                 return self._read(entity, record_id)
             case "PUT" | "PATCH", [entity, record_id]:
@@ -93,9 +102,12 @@ class FakeEspoCrm:
     def _create(self, entity: str, data: dict) -> Response:
         if any(data.get(field) in (None, "") for field in REQUIRED.get(entity, ())):
             return Response(400, None)
+        return Response(200, self._store(entity, data))
+
+    def _store(self, entity: str, data: dict) -> dict:
         record = {**data, "id": uuid.uuid4().hex[:17], "createdAt": now()}
         self._records.setdefault(entity, {})[record["id"]] = record
-        return Response(200, dict(record))
+        return dict(record)
 
     def _read(self, entity: str, record_id: str) -> Response:
         record = self._records.get(entity, {}).get(record_id)
@@ -110,10 +122,12 @@ class FakeEspoCrm:
         record.update(data)
         return Response(200, dict(record))
 
-    def _search(self, entity: str, params: dict) -> list[dict]:
+    def _search(self, entity: str, params: dict) -> dict:
+        """Ответ поиска: total — все совпадения, list — не больше maxSize."""
         found = [r for r in self._records.get(entity, {}).values() if matches(r, params.get("where", []))]
         found = ordered(found, params.get("orderBy"), params.get("order"))
-        return [dict(r) for r in found[: int(params.get("maxSize") or len(found))]]
+        page = [dict(r) for r in found[: int(params.get("maxSize") or len(found))]]
+        return {"total": len(found), "list": page}
 
     def _related(self, entity: str, record_id: str, link: str, order_by: str | None) -> list[dict]:
         child, parent_field = LINKS[(entity, link)]
@@ -138,12 +152,19 @@ def search_params(params: dict) -> dict:
 
 
 def matches(record: dict, where: list[dict]) -> bool:
-    for condition in where:
-        if condition["type"] != "equals":
-            raise NotImplementedError(f"Фейк EspoCRM не знает условие {condition['type']}")
-        if record.get(condition["attribute"]) != condition.get("value"):
-            return False
-    return True
+    return all(condition_matches(record, condition) for condition in where)
+
+
+def condition_matches(record: dict, condition: dict) -> bool:
+    kind, attribute, value = condition["type"], condition["attribute"], condition.get("value")
+    if kind == "equals":
+        return record.get(attribute) == value
+    if kind == "in":
+        return record.get(attribute) in value
+    if kind == "linkedWith":
+        # Связь многие-ко-многим (User.teams): id связанных записей лежат в <связь>Ids.
+        return bool(set(record.get(attribute + "Ids") or []) & set(value))
+    raise NotImplementedError(f"Фейк EspoCRM не знает условие {kind}")
 
 
 def ordered(records: list[dict], order_by: str | None, order: str | None = None) -> list[dict]:
