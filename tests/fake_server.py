@@ -22,6 +22,7 @@ BASE_URL_ENV = {
     "META_GRAPH_BASE_URL": "/meta",
     "TELEGRAM_API_BASE_URL": "/telegram",
     "ESPOCRM_BASE_URL": "/espocrm",
+    "SMSAPI_BASE_URL": "/smsapi",
 }
 
 # Хост фейка, каким его видит n8n из контейнера.

@@ -27,6 +27,10 @@
             {
               "name": "text",
               "type": "string"
+            },
+            {
+              "name": "template",
+              "type": "object"
             }
           ]
         }
@@ -43,7 +47,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Кому и куда: Канал и id Клиента в нём, аккаунт Заказчика в Канале, язык Беседы.\n-- in_window — с последнего сообщения Клиента прошло меньше 24 часов: Meta пускает свободный текст\n-- только в это окно, дальше WhatsApp принимает лишь одобренные шаблоны, а Messenger — лишь ответ\n-- человека с меткой HUMAN_AGENT.\nselect v.channel, v.sender_id,\n  case v.channel\n    when 'messenger' then c.messenger_page_id\n    when 'whatsapp' then c.whatsapp_phone_number_id\n    when 'instagram' then c.instagram_account_id\n  end as account_id,\n  coalesce(v.language, c.default_language) as language,\n  coalesce((select max(created_at) from messages\n            where conversation_id = v.id and direction = 'in') > now() - interval '24 hours', false) as in_window,\n  $2 as text\nfrom conversations v\njoin companies c on c.id = v.company_id\nwhere v.id = $1::uuid",
+        "query": "-- Кому и куда: Канал и id Клиента в нём, аккаунт Заказчика в Канале, язык Беседы.\n-- in_window — с последнего сообщения Клиента прошло меньше 24 часов: Meta пускает свободный текст\n-- только в это окно, дальше WhatsApp принимает лишь одобренные шаблоны, а Messenger — лишь ответ\n-- человека с меткой HUMAN_AGENT.\n-- phone — телефон из Заявки Беседы: на него идут SMS Автоматизаций Клиенту из Messenger и Instagram.\nselect v.channel, v.sender_id,\n  case v.channel\n    when 'messenger' then c.messenger_page_id\n    when 'whatsapp' then c.whatsapp_phone_number_id\n    when 'instagram' then c.instagram_account_id\n  end as account_id,\n  coalesce(v.language, c.default_language) as language,\n  coalesce((select max(created_at) from messages\n            where conversation_id = v.id and direction = 'in') > now() - interval '24 hours', false) as in_window,\n  (select phone from leads where conversation_id = v.id and phone is not null\n   order by updated_at desc limit 1) as phone,\n  $2 as text\nfrom conversations v\njoin companies c on c.id = v.company_id\nwhere v.id = $1::uuid",
         "options": {
           "queryReplacement": "={{ [$json.conversation_id, $json.text] }}"
         }
@@ -66,7 +70,7 @@
       ],
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Запрос в API Канала: { url, token_env, body }. Токен узел отправки берёт из $env[token_env],\n// в данные выполнения он не попадает. Новый Канал = новая функция в CHANNELS.\nconst GRAPH = $env.META_GRAPH_BASE_URL;\n// Вне окна 24 часов WhatsApp принимает только шаблон «есть новости»: одобрен у Meta на pl и en\n// (docs/whatsapp-setup.md). Клиент отвечает на него — окно открывается снова.\nconst WHATSAPP_NEWS_TEMPLATE = 'news_update';\n\n// Messenger и Instagram Direct — один Send API Messenger Platform, токен страницы: Instagram —\n// страницы, связанной с аккаунтом Instagram. Вне окна 24 часов оба пускают только ответ человека\n// с меткой HUMAN_AGENT (до 7 дней). Ответ Ассистента всегда в окне: он идёт сразу за сообщением Клиента.\nfunction sendApi(token_env) {\n  return (m) => ({\n    url: `${GRAPH}/me/messages`,\n    token_env,\n    body: {\n      recipient: { id: m.sender_id },\n      ...(m.in_window ? { messaging_type: 'RESPONSE' } : { messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' }),\n      message: { text: m.text },\n    },\n  });\n}\n\nfunction whatsapp(m) {\n  const message = m.in_window\n    ? { type: 'text', text: { body: m.text } }\n    : { type: 'template', template: { name: WHATSAPP_NEWS_TEMPLATE, language: { code: m.language === 'pl' ? 'pl' : 'en' } } };\n  return {\n    url: `${GRAPH}/${m.account_id}/messages`,\n    token_env: 'WHATSAPP_ACCESS_TOKEN',\n    body: { messaging_product: 'whatsapp', recipient_type: 'individual', to: m.sender_id, ...message },\n  };\n}\n\nconst CHANNELS = {\n  messenger: sendApi('META_PAGE_ACCESS_TOKEN'),\n  instagram: sendApi('INSTAGRAM_ACCESS_TOKEN'),\n  whatsapp,\n};\nconst build = CHANNELS[$json.channel];\nif (!build) throw new Error(`Канал ${$json.channel}: отправка не поддерживается`);\nreturn { json: build($json) };"
+        "jsCode": "// Запрос в API Канала: { url, token_env, body }, для SMS — { url, token_env, form }. Токен узел отправки\n// берёт из $env[token_env], в данные выполнения он не попадает. Новый Канал = новая функция в CHANNELS.\nconst GRAPH = $env.META_GRAPH_BASE_URL;\n// Вне окна 24 часов WhatsApp принимает только шаблон «есть новости»: одобрен у Meta на pl и en\n// (docs/whatsapp-setup.md). Клиент отвечает на него — окно открывается снова.\nconst WHATSAPP_NEWS_TEMPLATE = 'news_update';\n\n// Messenger и Instagram Direct — один Send API Messenger Platform, токен страницы: Instagram —\n// страницы, связанной с аккаунтом Instagram. Вне окна 24 часов оба пускают только ответ человека\n// с меткой HUMAN_AGENT (до 7 дней). Ответ Ассистента всегда в окне: он идёт сразу за сообщением Клиента.\nfunction sendApi(token_env) {\n  return (m) => ({\n    url: `${GRAPH}/me/messages`,\n    token_env,\n    body: {\n      recipient: { id: m.sender_id },\n      ...(m.in_window ? { messaging_type: 'RESPONSE' } : { messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' }),\n      message: { text: m.text },\n    },\n  });\n}\n\nfunction whatsappTemplate(name, language, parameters = []) {\n  const body = parameters.length\n    ? { components: [{ type: 'body', parameters: parameters.map((text) => ({ type: 'text', text })) }] }\n    : {};\n  return { type: 'template', template: { name, language: { code: language === 'pl' ? 'pl' : 'en' }, ...body } };\n}\n\n// Автоматизация (на входе template) идёт своим одобренным шаблоном в любое время, а не текстом.\nfunction whatsappMessage(m) {\n  if (m.template) return whatsappTemplate(m.template.name, m.language, m.template.parameters);\n  if (m.in_window) return { type: 'text', text: { body: m.text } };\n  return whatsappTemplate(WHATSAPP_NEWS_TEMPLATE, m.language);\n}\n\nfunction whatsapp(m) {\n  return {\n    url: `${GRAPH}/${m.account_id}/messages`,\n    token_env: 'WHATSAPP_ACCESS_TOKEN',\n    body: { messaging_product: 'whatsapp', recipient_type: 'individual', to: m.sender_id, ...whatsappMessage(m) },\n  };\n}\n\n// Messenger и Instagram Автоматизации не пускают (после 24 часов — только человек): Клиенту оттуда\n// Автоматизация уходит SMS через SMSAPI на телефон Заявки. Поле отправителя — зарегистрированное\n// в SMSAPI; пусто — поле по умолчанию аккаунта.\nfunction sms(m) {\n  if (!m.phone) throw new Error('Нет телефона Клиента: SMS Автоматизации не отправить');\n  const form = { to: m.phone.replace(/^\\+/, ''), message: m.text, encoding: 'utf-8', format: 'json' };\n  if ($env.SMSAPI_SENDER) form.from = $env.SMSAPI_SENDER;\n  // URLSearchParams в песочнице Code-узла нет.\n  const encoded = Object.entries(form).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&');\n  return { url: `${$env.SMSAPI_BASE_URL}/sms.do`, token_env: 'SMSAPI_TOKEN', form: encoded };\n}\n\nconst CHANNELS = {\n  messenger: sendApi('META_PAGE_ACCESS_TOKEN'),\n  instagram: sendApi('INSTAGRAM_ACCESS_TOKEN'),\n  whatsapp,\n};\nconst template = $('Message to send').item.json.template;\nconst build = template && $json.channel !== 'whatsapp' ? sms : CHANNELS[$json.channel];\nif (!build) throw new Error(`Канал ${$json.channel}: отправка не поддерживается`);\nreturn { json: build({ ...$json, template }) };"
       }
     },
     {
@@ -75,8 +79,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        660,
-        300
+        880,
+        400
       ],
       "parameters": {
         "method": "POST",
@@ -96,6 +100,83 @@
         "options": {
           "timeout": 60000
         }
+      }
+    },
+    {
+      "id": "c29e0c11-0000-4000-8000-000000000001",
+      "name": "Via SMS",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c29sms",
+              "leftValue": "={{ !!$json.form }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c29e0c11-0000-4000-8000-000000000002",
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env[$json.token_env] }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/x-www-form-urlencoded",
+        "body": "={{ $json.form }}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "c29e0c11-0000-4000-8000-000000000003",
+      "name": "SMS accepted",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// SMSAPI сообщает об ошибке в теле ответа (error, message), не только кодом HTTP.\nif ($json.error) throw new Error(`SMSAPI ${$json.error}: ${$json.message}`);\nreturn { json: $json };"
       }
     }
   ],
@@ -126,7 +207,36 @@
       "main": [
         [
           {
+            "node": "Via SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Via SMS": {
+      "main": [
+        [
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Send to channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS": {
+      "main": [
+        [
+          {
+            "node": "SMS accepted",
             "type": "main",
             "index": 0
           }

@@ -60,13 +60,16 @@ services:
       RETRY_WEBHOOK_SECRET: test-retry-secret
       ESPOCRM_API_KEY: test-espocrm-key
       EMPLOYEE_REPLY_SECRET: test-employee-reply-secret
-      # Расписание retry в тестах не срабатывает (1 января): прогоны только по вебхуку.
+      SMSAPI_TOKEN: test-smsapi-token
+      # Расписания retry и напоминаний в тестах не срабатывают (1 января): прогоны только по вебхуку.
       RETRY_SCHEDULE_CRON: ${RETRY_SCHEDULE_CRON:-0 0 1 1 *}
+      REMINDER_SCHEDULE_CRON: ${REMINDER_SCHEDULE_CRON:-0 0 1 1 *}
       # Внешние API — фейк-сервер pytest на хосте (tests/fake_server.py).
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-http://host.docker.internal:9/openrouter}
       META_GRAPH_BASE_URL: ${META_GRAPH_BASE_URL:-http://host.docker.internal:9/meta}
       TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-http://host.docker.internal:9/telegram}
       ESPOCRM_BASE_URL: ${ESPOCRM_BASE_URL:-http://host.docker.internal:9/espocrm}
+      SMSAPI_BASE_URL: ${SMSAPI_BASE_URL:-http://host.docker.internal:9/smsapi}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

@@ -91,6 +91,11 @@ class FakeEspoCrm:
         with self._lock:
             return self._store(entity, data)
 
+    def change(self, entity: str, record_id: str, data: dict) -> None:
+        """Правка записи человеком в CRM (сотрудник перенёс или отменил Запись)."""
+        with self._lock:
+            self._records[entity][record_id].update(data)
+
     def records(self, entity: str) -> list[dict]:
         """Записи сущности в порядке создания."""
         with self._lock:
