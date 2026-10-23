@@ -6,7 +6,9 @@ from contextlib import contextmanager
 
 import pytest
 
+from tests import knowledge
 from tests.factories import create_company
+from tests.fake_server import Response
 from tests.meta import MetaClient, messenger_payload, new_mid
 from tests.openrouter import assistant_reply, respond_with
 from tests.polling import eventually, stays
@@ -75,11 +77,12 @@ def processing_stale(db, minutes=10):
 
 def test_failed_processing_is_retried_from_buffer(db, fake, meta, n8n_url, client):
     respond_with(fake, assistant_reply(reply="Dzień dobry, w czym pomóc?"))
-    with table_unavailable(db, "knowledge_items"):
-        response = meta.post(messenger_payload(PAGE_ID, client, "Dzień dobry"))
-        stays(lambda: replies_sent(fake) == [])
+    knowledge.respond_with(fake, Response(500, {}))
+    response = meta.post(messenger_payload(PAGE_ID, client, "Dzień dobry"))
+    stays(lambda: replies_sent(fake) == [])
     assert response.status_code == 200
 
+    knowledge.respond_with(fake, [])
     processing_stale(db)
     run_retry(n8n_url)
 

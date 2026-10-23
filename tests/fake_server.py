@@ -1,7 +1,7 @@
 """Фейк внешних API (OpenRouter, Meta Graph, Telegram, Google Sheets, CRM) на хосте.
 
 Один HTTP-сервер, у каждого API свой префикс пути: /openrouter, /meta, /telegram, /sheets,
-/google-oauth (токен service account), /crm.
+/google-oauth (токен service account), /crm, /espocrm (REST API EspoCRM).
 n8n ходит сюда по базовым URL из env (`*_BASE_URL`), см. `FakeServer.base_urls`.
 
 Тест задаёт ответы через `respond` и читает полученные запросы через `requests`.
@@ -20,6 +20,7 @@ BASE_URL_ENV = {
     "TELEGRAM_API_BASE_URL": "/telegram",
     "GOOGLE_SHEETS_BASE_URL": "/sheets",
     "GOOGLE_OAUTH_BASE_URL": "/google-oauth",
+    "ESPOCRM_BASE_URL": "/espocrm",
 }
 
 # Хост фейка, каким его видит n8n из контейнера.

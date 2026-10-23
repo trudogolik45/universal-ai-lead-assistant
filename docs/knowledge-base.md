@@ -1,10 +1,10 @@
 # База знаний и профиль Заказчика
 
-Профиль Заказчика и База знаний лежат в Supabase (таблицы `companies` и `knowledge_items`,
-схема — `supabase/migrations/0001_schema.sql`). Отдельного интерфейса нет: правки — SQL в
-Supabase SQL Editor или `psql "$DATABASE_URL"`. Ассистент читает профиль и Базу знаний заново
-на каждое входящее Сообщение, поэтому правка действует со следующего Сообщения, без перезапуска
-n8n и без правки workflow.
+База знаний живёт в EspoCRM (сущность `KnowledgeItem`, меню «Baza wiedzy»): Заказчик правит
+услуги, цены, график и адрес сам, в одном месте. Профиль Заказчика пока в Supabase (таблица
+`companies`, схема — `supabase/migrations/`), правки — SQL в Supabase SQL Editor или
+`psql "$DATABASE_URL"`. Ассистент читает профиль и Базу знаний заново на каждое входящее
+Сообщение, поэтому правка действует со следующего Сообщения, без перезапуска n8n и без правки workflow.
 
 Ниже `uniwersalny-serwis` — slug демо-профиля; slug своего Заказчика: `select slug, name from companies;`.
 
@@ -13,65 +13,38 @@ n8n и без правки workflow.
 На каждое Сообщение workflow `handle-message` собирает:
 
 - `companies.name`, `default_language`, `handoff_rules`, `required_fields`, `ai_model`;
-- всю Базу знаний Заказчика (`kind`, `title`, `body`, `price`) — целиком, без поиска, порядок:
-  `kind`, затем `position`;
+- всю Базу знаний из EspoCRM (`kind`, `name`, `description`, `price`, `priceFrom`) — целиком,
+  без поиска, до 200 записей (предел REST API EspoCRM), порядок — по `kind`;
 - текущую Заявку и последние 20 Сообщений Беседы.
 
 Ассистент отвечает только по Базе знаний: цен, услуг и сроков, которых в ней нет, он не называет,
 а передаёт Беседу человеку. Поэтому всё, о чём Клиент может спросить, должно быть в Базе знаний.
 
-## База знаний (`knowledge_items`)
+EspoCRM недоступна (две попытки подряд) — Ассистент цену не угадывает и Клиенту не отвечает:
+Сообщение остаётся в буфере входящих, и retry (раз в 5 минут) обработает его, когда CRM вернётся.
 
-| Поле | Значение |
+## База знаний (EspoCRM, `KnowledgeItem`)
+
+| Поле (в EspoCRM) | Значение |
 |---|---|
-| `kind` | `service` — услуга, `faq` — вопрос-ответ, `hours` — часы работы, `rule` — правило (например, «термин подтверждает владелец») |
-| `title` | Название услуги или вопрос. Уникально в паре с `kind` у одного Заказчика |
-| `body` | Описание или ответ |
-| `price` | Цена в PLN (`numeric(10,2)`), только для услуг; `null` — цены нет, Ассистент её не назовёт |
-| `position` | Порядок внутри `kind` |
+| `name` (Nazwa) | Название услуги, вопрос FAQ или заголовок сведения |
+| `kind` (Rodzaj) | `service` — услуга, `hours` — график работы, `company` — о компании: адрес, контакты, оплата, гарантия, марки; `faq` — вопрос-ответ; `rule` — правило (чего Ассистент не обещает) |
+| `description` (Treść) | Описание, длительность, оговорки или ответ на вопрос |
+| `price` (Cena, zł) | Цена в PLN с VAT; пусто — цены нет, Ассистент её не назовёт |
+| `priceFrom` (Cena „od”) | Цена минимальная: Ассистент скажет «от … zł» |
 
-Добавить или обновить услугу (повтор не создаёт дубль):
+Править — в EspoCRM: «Baza wiedzy» → запись → «Edytuj», новая — «Dodaj do bazy wiedzy».
+API-пользователь `n8n` Базу знаний только читает (`scripts/espocrm_bootstrap.py`).
 
-```sql
-insert into knowledge_items (company_id, kind, title, body, price, position)
-select id, 'service', 'Montaż karnisza', 'Montaż jednego karnisza z wierceniem.', 90.00, 5
-from companies where slug = 'uniwersalny-serwis'
-on conflict (company_id, kind, title)
-do update set body = excluded.body, price = excluded.price, position = excluded.position;
+Демо-База знаний автосервиса AutoPro Service (`scripts/data/autopro_knowledge.json`, польский
+перевод `docs/autopro_service_knowledge_base.md`) заливается в EspoCRM на VPS:
+
+```sh
+make espocrm-knowledge
 ```
 
-Поменять цену:
-
-```sql
-update knowledge_items set price = 130.00
-where kind = 'service' and title = 'Montaż mebli'
-  and company_id = (select id from companies where slug = 'uniwersalny-serwis');
-```
-
-Добавить вопрос-ответ:
-
-```sql
-insert into knowledge_items (company_id, kind, title, body, position)
-select id, 'faq', 'Czy wystawiacie fakturę?', 'Tak, fakturę VAT wystawiamy na życzenie.', 3
-from companies where slug = 'uniwersalny-serwis';
-```
-
-Удалить запись:
-
-```sql
-delete from knowledge_items
-where kind = 'faq' and title = 'Czy wystawiacie fakturę?'
-  and company_id = (select id from companies where slug = 'uniwersalny-serwis');
-```
-
-Посмотреть Базу знаний целиком:
-
-```sql
-select kind, position, title, price, body
-from knowledge_items
-where company_id = (select id from companies where slug = 'uniwersalny-serwis')
-order by kind, position;
-```
+Повтор безопасен: запись ищется по паре (`kind`, `name`), существующие не трогаются, правки
+Заказчика не затираются.
 
 ## Обязательные поля (`companies.required_fields`)
 
@@ -154,7 +127,7 @@ values ('nowa-firma', 'Nowa Firma', 'pl', 'auto', '{name,contact,service}',
         'Przekaż człowiekowi: reklamacje.', '<id страницы>');
 ```
 
-Затем База знаний — запросами выше с `slug = 'nowa-firma'`.
+Затем База знаний — в EspoCRM Заказчика, см. выше.
 
 ## Удаление данных Клиента
 

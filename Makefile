@@ -6,7 +6,7 @@ GENERATED_SECRETS = N8N_ENCRYPTION_KEY ESPOCRM_DB_PASSWORD ESPOCRM_ADMIN_PASSWOR
 # Python-скрипты на VPS запускаются в этом контейнере: секреты из .env не покидают VPS.
 UV_IMAGE = ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-.PHONY: check deploy env-init espocrm-api-user workflows workflows-export
+.PHONY: check deploy env-init espocrm-api-user espocrm-knowledge workflows workflows-export
 
 # Валидация прод-конфигов локально: compose и Caddyfile. Пароли в .env.example пустые,
 # а compose без них не стартует — для проверки подставляем заглушки.
@@ -53,6 +53,15 @@ espocrm-api-user:
 		&& test -n "$$key" \
 		&& sed -i "/^ESPOCRM_API_KEY=/d" .env && echo "ESPOCRM_API_KEY=$$key" >> .env \
 		&& docker compose up -d n8n && echo "ESPOCRM_API_KEY записан, n8n пересоздан"'
+
+# Демо-База знаний AutoPro Service в EspoCRM (scripts/espocrm_knowledge.py). Повтор безопасен:
+# существующие записи и правки Заказчика не трогаются.
+espocrm-knowledge:
+	ssh $(VPS) 'mkdir -p $(VPS_DIR)/app'
+	rsync -az pyproject.toml uv.lock scripts $(VPS):$(VPS_DIR)/app/
+	ssh $(VPS) 'cd $(VPS_DIR) \
+		&& docker run --rm --network uala_default --env-file .env -e ESPOCRM_URL=http://espocrm \
+			-v "$$PWD/app:/app" -w /app $(UV_IMAGE) uv run -q --no-dev python -m scripts.espocrm_knowledge'
 
 # Workflow из n8n/workflows на прод-n8n: credentials из ~/$(VPS_DIR)/.env (DATABASE_URL),
 # импорт, publish:workflow каждого, перезапуск n8n. Нужен поднятый стек (make deploy).

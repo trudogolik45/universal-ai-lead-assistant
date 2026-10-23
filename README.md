@@ -24,7 +24,7 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 |---|---|---|
 | `meta-webhook` | `POST /webhook/meta` | Подпись Meta → сообщения в буфер входящих (`inbox`, дубль по id сообщения отсекается) → 200 Meta → `process-inbox` |
 | `process-inbox` | вызов из других workflow | Сообщение из буфера через `handle-message`; дошло до конца — помечается обработанным, упало — остаётся в буфере |
-| `handle-message` | вызов из других workflow | Заказчик по странице → Сообщение в Беседу → OpenRouter → ответ Клиенту, Заявка, Передача человеку |
+| `handle-message` | вызов из других workflow | Заказчик по странице → Сообщение в Беседу → База знаний из EspoCRM → OpenRouter → ответ Клиенту, Заявка, Передача человеку |
 | `deliver-lead` | вызов из других workflow | Заявка в Google-таблицу, затем в CRM-webhook |
 | `notify-lead` | вызов из других workflow | Уведомление о Заявке или Передаче человеку в группу Telegram |
 | `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram |
@@ -32,7 +32,8 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 | `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Повтор необработанных сообщений буфера, дозапись недоставленных Заявок и алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
 
 Рядом работает EspoCRM на своём Postgres (`deploy/espocrm`, ADR 0001 и 0002). В её модуле Uala
-есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`) и Автомобиль (`Vehicle`).
+есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`), Автомобиль (`Vehicle`)
+и База знаний (`KnowledgeItem`) — её Ассистент читает на каждое Сообщение.
 У Клиента (`Contact`) есть поле Согласие на рекламу (`marketingConsent`). n8n ходит в EspoCRM по
 REST API под API-пользователем `n8n`.
 
@@ -118,6 +119,10 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
    Скрипт `scripts/espocrm_bootstrap.py` работает на VPS в контейнере uv. Под admin он создаёт
    роль и API-пользователя `n8n`, пишет его ключ в `ESPOCRM_API_KEY` в `~/uala/.env` и
    пересоздаёт n8n. Ключ не покидает VPS.
+   Демо-База знаний AutoPro Service в EspoCRM (повтор безопасен, правки Заказчика не затирает):
+   ```
+   make espocrm-knowledge
+   ```
 7. Залить workflow:
    ```
    make workflows

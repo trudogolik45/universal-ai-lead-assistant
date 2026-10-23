@@ -55,6 +55,7 @@ services:
       TELEGRAM_BOT_TOKEN: test-telegram-token
       TELEGRAM_WEBHOOK_SECRET: test-telegram-webhook-secret
       RETRY_WEBHOOK_SECRET: test-retry-secret
+      ESPOCRM_API_KEY: test-espocrm-key
       # Расписание retry в тестах не срабатывает (1 января): прогоны только по вебхуку.
       RETRY_SCHEDULE_CRON: ${RETRY_SCHEDULE_CRON:-0 0 1 1 *}
       # Service account: ключ генерирует фикстура n8n_url (tests/google.py).
@@ -66,6 +67,7 @@ services:
       TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-http://host.docker.internal:9/telegram}
       GOOGLE_SHEETS_BASE_URL: ${GOOGLE_SHEETS_BASE_URL:-http://host.docker.internal:9/sheets}
       GOOGLE_OAUTH_BASE_URL: ${GOOGLE_OAUTH_BASE_URL:-http://host.docker.internal:9/google-oauth}
+      ESPOCRM_BASE_URL: ${ESPOCRM_BASE_URL:-http://host.docker.internal:9/espocrm}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

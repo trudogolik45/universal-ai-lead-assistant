@@ -4,6 +4,7 @@ import psycopg
 import pytest
 
 from scripts.migrate import migrate
+from tests import knowledge
 from tests.fake_server import FakeServer
 from tests.google import ServiceAccount
 from tests.stand import Stand, docker_available
@@ -54,9 +55,10 @@ def fake_server():
 
 @pytest.fixture
 def fake(fake_server):
-    """Фейк внешних API без заданных ответов и записанных запросов.
+    """Фейк внешних API без записанных запросов; из ответов задана только пустая База знаний EspoCRM.
     Сброс и после теста: заданные ответы не утекают в тесты, которые фейк не берут."""
     fake_server.reset()
+    knowledge.respond_with(fake_server, [])
     yield fake_server
     fake_server.reset()
 

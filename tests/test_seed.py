@@ -13,21 +13,8 @@ def profiles(db):
     }
 
 
-def knowledge_kinds(db, slug):
-    return {
-        row[0]
-        for row in db.execute(
-            "select k.kind from knowledge_items k join companies c on c.id = k.company_id"
-            " where c.slug = %s",
-            (slug,),
-        )
-    }
-
-
-def row_counts(db):
-    return db.execute(
-        "select (select count(*) from companies), (select count(*) from knowledge_items)"
-    ).fetchone()
+def company_count(db):
+    return db.execute("select count(*) from companies").fetchone()[0]
 
 
 def test_seed_creates_three_polish_profiles(db, database_url):
@@ -43,29 +30,13 @@ def test_seed_creates_three_polish_profiles(db, database_url):
         assert handoff_rules
 
 
-def test_every_profile_has_full_knowledge_base(db, database_url):
-    seed(database_url)
-
-    for slug in SEEDED_SLUGS:
-        assert knowledge_kinds(db, slug) == {"service", "faq", "hours", "rule"}
-
-
-def test_services_have_prices(db, database_url):
-    seed(database_url)
-
-    unpriced = db.execute(
-        "select count(*) from knowledge_items where kind = 'service' and price is null"
-    ).fetchone()[0]
-    assert unpriced == 0
-
-
 def test_seed_twice_creates_no_duplicates(db, database_url):
     seed(database_url)
-    first = row_counts(db)
+    first = company_count(db)
 
     seed(database_url)
 
-    assert row_counts(db) == first
+    assert company_count(db) == first
 
 
 def test_seed_binds_demo_page_and_delivery_channel(db, database_url):
