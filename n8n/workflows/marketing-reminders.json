@@ -1,0 +1,419 @@
+{
+  "id": "uala0marketing00",
+  "name": "Marketing reminders",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "c33b0000-0000-4000-8000-000000000001",
+      "name": "Every day",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "={{ $env.MARKETING_SCHEDULE_CRON || '0 10 * * *' }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c33b0000-0000-4000-8000-000000000002",
+      "name": "Run now",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "6f3a1c52-8e47-4b0d-9a33-2c7e5d1b0330",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "marketing",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "c33b0000-0000-4000-8000-000000000003",
+      "name": "Secret valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$env.RETRY_WEBHOOK_SECRET && $json.headers['x-retry-secret'] === $env.RETRY_WEBHOOK_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c33b0000-0000-4000-8000-000000000004",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        200
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "c33b0000-0000-4000-8000-000000000005",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        400
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Поводы напоминания на день рассылки (по Варшаве): сезон шин — весной летние (15.03–30.04), осенью\n// зимние (1.10–30.11), повод — сезон года; ТО — через 11 месяцев после последней Записи Клиента (в SQL).\n// today (YYYY-MM-DD) — ручной запуск как будто в другой день; по расписанию — сегодня.\nconst TIME_ZONE = 'Europe/Warsaw';\nconst TYRE_SEASONS = [\n  { season: 'spring', from: '03-15', to: '04-30' },\n  { season: 'autumn', from: '10-01', to: '11-30' },\n];\nconst today = $json.body?.today;\nconst day = today ? DateTime.fromISO(today, { zone: TIME_ZONE }) : DateTime.now().setZone(TIME_ZONE);\nif (!day.isValid) throw new Error(`Неверный день рассылки: ${today}`);\nconst monthDay = day.toFormat('MM-dd');\nconst tyres = TYRE_SEASONS.find(({ from, to }) => from <= monthDay && monthDay <= to);\nreturn { json: { day: day.toISODate(), tyres_campaign: tyres ? `tyres:${day.year}-${tyres.season}` : '' } };"
+      },
+      "id": "c33b0000-0000-4000-8000-000000000011",
+      "name": "Campaigns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "id": "c33b0000-0000-4000-8000-000000000006",
+      "name": "Find consented clients",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmAdapter0",
+          "mode": "id"
+        },
+        "mode": "once",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "consented_clients",
+            "data": "={{ {} }}"
+          },
+          "matchingColumns": [
+            "operation",
+            "data"
+          ],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "c33b0000-0000-4000-8000-000000000007",
+      "name": "Claim due messages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Кому напомнить: Клиенты с Согласием на рекламу в CRM ($1: [{channel, sender_id}]) и поводом — сезон шин\n-- ($3; пусто — не сезон) или ТО: последняя Запись Клиента началась больше 11 месяцев до дня рассылки $2\n-- (повод — эта Запись: после новой Записи отсчёт заново). Клиенту за запуск — одно напоминание, каждый\n-- повод — один раз: строку ставит первый запуск, повтор берёт только неотправленное через 5 минут.\n-- Беседа — последняя у Клиента с телефоном в Заявке: SMS Клиенту из Messenger и Instagram идёт на него.\nwith consented as (\n  select c->>'channel' as channel, c->>'sender_id' as sender_id from jsonb_array_elements($1::jsonb) c\n),\nclients as (\n  select distinct on (v.company_id, v.channel, v.sender_id)\n    v.company_id, v.channel, v.sender_id, v.id as conversation_id\n  from conversations v\n  join consented k on k.channel = v.channel and k.sender_id = v.sender_id\n  join leads l on l.conversation_id = v.id\n  where l.phone is not null or v.channel = 'whatsapp'\n  order by v.company_id, v.channel, v.sender_id, v.created_at desc\n),\nlast_visits as (\n  select distinct on (v.company_id, v.channel, v.sender_id)\n    v.company_id, v.channel, v.sender_id, a.id as appointment_id, a.starts_at\n  from appointments a\n  join leads l on l.id = a.lead_id\n  join conversations v on v.id = l.conversation_id\n  order by v.company_id, v.channel, v.sender_id, a.starts_at desc\n),\ncampaigns as (\n  select c.*, p.campaign\n  from clients c\n  left join last_visits lv using (company_id, channel, sender_id)\n  cross join lateral (values\n    (case when lv.starts_at < $2::date - interval '11 months' then 'service:' || lv.appointment_id end),\n    (nullif($3, ''))\n  ) p (campaign)\n  where p.campaign is not null\n),\ndue as (\n  select distinct on (p.company_id, p.channel, p.sender_id) p.*\n  from campaigns p\n  where not exists (\n    select 1 from marketing_messages m\n    where (m.company_id, m.channel, m.sender_id, m.campaign) = (p.company_id, p.channel, p.sender_id, p.campaign)\n      and (m.sent_at is not null or m.claimed_at >= now() - interval '5 minutes'))\n  order by p.company_id, p.channel, p.sender_id, p.campaign\n),\nclaimed as (\n  insert into marketing_messages (company_id, channel, sender_id, campaign, conversation_id)\n  select company_id, channel, sender_id, campaign, conversation_id from due\n  on conflict (company_id, channel, sender_id, campaign) do update\n    set claimed_at = now(), conversation_id = excluded.conversation_id\n  where marketing_messages.sent_at is null and marketing_messages.claimed_at < now() - interval '5 minutes'\n  returning company_id, channel, sender_id, campaign, conversation_id\n)\nselect c.company_id, c.channel, c.sender_id, c.campaign, c.conversation_id, co.name as company,\n  coalesce(v.language, co.default_language) as language\nfrom claimed c\njoin conversations v on v.id = c.conversation_id\njoin companies co on co.id = c.company_id",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json.clients), $('Campaigns').first().json.day, $('Campaigns').first().json.tyres_campaign] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "c33b0000-0000-4000-8000-000000000008",
+      "name": "Marketing message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Напоминание на языке Беседы: шаблоны WhatsApp одобрены у Meta на pl и en (docs/whatsapp-setup.md),\n// текст SMS — те же два языка. SMS говорит, как отказаться: STOP в Канале, откуда Клиент писал.\nconst TEMPLATES = {\n  service: 'service_reminder',\n  'tyres-spring': 'summer_tyres_reminder',\n  'tyres-autumn': 'winter_tyres_reminder',\n};\nconst TEXTS = {\n  pl: {\n    service: (company) => `${company}: od ostatniej wizyty minął prawie rok — czas na przegląd. Zapraszamy!`,\n    'tyres-spring': (company) => `${company}: zbliża się sezon opon letnich — zapraszamy na wymianę.`,\n    'tyres-autumn': (company) => `${company}: zbliża się sezon opon zimowych — zapraszamy na wymianę.`,\n    stop: (place) => `Nie chcesz takich przypomnień? Napisz STOP na ${place}.`,\n    places: { messenger: 'Messengerze', instagram: 'Instagramie' },\n  },\n  en: {\n    service: (company) => `${company}: it has been almost a year since your last visit — time for a service.`,\n    'tyres-spring': (company) => `${company}: summer tyre season is coming — book your tyre change with us.`,\n    'tyres-autumn': (company) => `${company}: winter tyre season is coming — book your tyre change with us.`,\n    stop: (place) => `Don't want these reminders? Write STOP on ${place}.`,\n    places: { messenger: 'Messenger', instagram: 'Instagram' },\n  },\n};\n\n// Повод «service:<Запись>» или «tyres:<год>-<сезон>» → вид напоминания.\nfunction kind(campaign) {\n  return campaign.startsWith('service:') ? 'service' : `tyres-${campaign.split('-').at(-1)}`;\n}\n\n// Postgres-узел без строк отдаёт один item без полей — напоминать некому.\nreturn $input.all().filter((item) => item.json.campaign).map(({ json: r }) => {\n  const texts = TEXTS[r.language === 'pl' ? 'pl' : 'en'];\n  const k = kind(r.campaign);\n  const place = texts.places[r.channel];\n  return {\n    json: {\n      company_id: r.company_id,\n      channel: r.channel,\n      sender_id: r.sender_id,\n      campaign: r.campaign,\n      conversation_id: r.conversation_id,\n      text: place ? `${texts[k](r.company)} ${texts.stop(place)}` : texts[k](r.company),\n      template: { name: TEMPLATES[k], parameters: [] },\n    },\n  };\n});"
+      }
+    },
+    {
+      "id": "c33b0000-0000-4000-8000-000000000009",
+      "name": "Send marketing message",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0sendClient0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $json.conversation_id }}",
+            "text": "={{ $json.text }}",
+            "template": "={{ $json.template }}"
+          },
+          "matchingColumns": [
+            "conversation_id",
+            "text",
+            "template"
+          ],
+          "schema": [
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "template",
+              "displayName": "template",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "c33b0000-0000-4000-8000-000000000010",
+      "name": "Mark marketing message sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1760,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Клиенту ушло: повод больше не напоминается. Не ушло — строка ждёт повтора следующим запуском.\nupdate marketing_messages set sent_at = now()\nwhere company_id = $1::uuid and channel = $2 and sender_id = $3 and campaign = $4",
+        "options": {
+          "queryReplacement": "={{ [$('Marketing message').item.json.company_id, $('Marketing message').item.json.channel, $('Marketing message').item.json.sender_id, $('Marketing message').item.json.campaign] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every day": {
+      "main": [
+        [
+          {
+            "node": "Campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now": {
+      "main": [
+        [
+          {
+            "node": "Secret valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Secret valid": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200": {
+      "main": [
+        [
+          {
+            "node": "Campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find consented clients": {
+      "main": [
+        [
+          {
+            "node": "Claim due messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim due messages": {
+      "main": [
+        [
+          {
+            "node": "Marketing message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marketing message": {
+      "main": [
+        [
+          {
+            "node": "Send marketing message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send marketing message": {
+      "main": [
+        [
+          {
+            "node": "Mark marketing message sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Campaigns": {
+      "main": [
+        [
+          {
+            "node": "Find consented clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

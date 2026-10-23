@@ -126,6 +126,23 @@ WhatsApp разрешает бизнесу писать свободным те�
 
 Дождитесь **Approved** у всех шести. Клиенты из Messenger и Instagram получают статус по SMS.
 
+## Шаг 9. Шаблоны «ТО» и «сезон шин»
+
+Клиентам, которые согласились на напоминания (поле «Zgoda marketingowa» у Клиента в CRM), система
+напоминает о ТО через 11 месяцев после визита и о сезонной замене шин: весной (с 15 марта) и осенью
+(с 1 октября). Без согласия такие сообщения не уходят.
+
+Создайте три шаблона категории **Marketing**, без переменных, каждый на **Polish** и **English**.
+Кнопка «STOP» не нужна: Клиент пишет STOP в ответ, и система снимает согласие.
+
+| Название | Polish | English |
+|---|---|---|
+| `service_reminder` | Dzień dobry! Od ostatniej wizyty minął prawie rok — czas na przegląd. Zapraszamy! Nie chcesz takich przypomnień? Odpisz STOP. | Hello! It has been almost a year since your last visit — time for a service. Don't want these reminders? Reply STOP. |
+| `winter_tyres_reminder` | Dzień dobry! Zbliża się sezon opon zimowych — zapraszamy na wymianę. Nie chcesz takich przypomnień? Odpisz STOP. | Hello! Winter tyre season is coming — book your tyre change with us. Don't want these reminders? Reply STOP. |
+| `summer_tyres_reminder` | Dzień dobry! Zbliża się sezon opon letnich — zapraszamy na wymianę. Nie chcesz takich przypomnień? Odpisz STOP. | Hello! Summer tyre season is coming — book your tyre change with us. Don't want these reminders? Reply STOP. |
+
+Дождитесь **Approved** у всех шести.
+
 ## Проверка
 
 Напишите на номер сервиса в WhatsApp с личного телефона. Ассистент должен ответить. Ответа нет —
@@ -141,6 +158,7 @@ WhatsApp разрешает бизнесу писать свободным те�
 | «Шаблон `news_update` одобрен на pl и en» | Шаг 6 | — |
 | «Шаблон `appointment_reminder` одобрен на pl и en» | Шаг 7 | — |
 | «Шаблоны `repair_accepted`, `repair_waiting_for_parts`, `repair_ready` одобрены на pl и en» | Шаг 8 | — |
+| «Шаблоны `service_reminder`, `winter_tyres_reminder`, `summer_tyres_reminder` одобрены на pl и en» | Шаг 9 | — |
 
 Токен даёт доступ к переписке вашего номера. Передавайте его так же, как токены Messenger
 (раздел «Что прислать разработчику» в [docs/meta-setup.md](meta-setup.md)): не в открытый чат и

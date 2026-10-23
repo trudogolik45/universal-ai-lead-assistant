@@ -7,6 +7,7 @@ from tests import knowledge
 from tests.factories import create_company, create_lead, open_conversation
 from tests.fake_server import Response
 from tests.knowledge import knowledge_item
+from tests.marketing import CONSENT_QUESTION
 from tests.meta import MetaClient, messenger_payload
 from tests.openrouter import assistant_reply, completion_requests, raw_reply, respond_with
 from tests.polling import eventually, stays
@@ -91,11 +92,13 @@ def test_full_lead_in_one_message_is_qualified_and_answered(db, fake, meta, clie
     eventually(lambda: sent_messages(fake))
     assert lead(db) == ("qualified", *FULL_LEAD.values(), "booking", [])
     assert conversation_language(db) == "pl"
-    assert outgoing_texts(db) == ["Dziękuję, właściciel potwierdzi termin."]
+    # Заявка собрана — к ответу один раз добавлен вопрос о Согласии на рекламу (#33).
+    answer = f"Dziękuję, właściciel potwierdzi termin.\n\n{CONSENT_QUESTION['pl']}"
+    assert outgoing_texts(db) == [answer]
     assert sent_messages(fake) == [{
         "recipient": {"id": client},
         "messaging_type": "RESPONSE",
-        "message": {"text": "Dziękuję, właściciel potwierdzi termin."},
+        "message": {"text": answer},
     }]
 
 

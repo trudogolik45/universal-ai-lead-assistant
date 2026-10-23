@@ -6,8 +6,8 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17-29-reminders` (от `spec-17` после #37, #26, #28), команда `uv run pytest`.
-- Результат: **200 passed** за 1000 с, пропусков нет.
+- Дата: 2026-10-23, ветка `spec-17-33-marketing-consent` (от `spec-17` после #29, #34), команда `uv run pytest`.
+- Результат: **227 passed, 3 failed** за 1241 с; три упавших (test_booking, test_assistant_reply) ждали ответ без вопроса о Согласии на рекламу — тесты поправлены, их файлы перепрогнаны: 28 passed.
 
 ## Сценарии спеки → тесты
 
@@ -66,6 +66,8 @@
 | Напоминания в настоящей EspoCRM (#29): API-пользователь находит запланированные Записи в окне без отменённых | `test_espocrm.py::test_api_user_finds_planned_meetings_to_remind` | passed |
 | Статус ремонта (#30): на «машину приняли», «ждём запчасти», «готово» Клиенту из WhatsApp — шаблон `repair_accepted` / `repair_waiting_for_parts` / `repair_ready` на pl, из Messenger и Instagram — SMS через SMSAPI на pl или en; внутренние статусы Клиенту не уходят; Клиенту с несколькими Каналами — одно сообщение в последнюю Беседу; без Беседы — ничего; чужой секрет отклоняется | `test_repair_status.py` (14) | passed |
 | Заказ-наряд в настоящей EspoCRM (#30): связан с Клиентом, Автомобилем и Записью, статусы ограничены; смена статуса мастером вызывает n8n со статусом и Беседами Клиента, сохранение без смены статуса — нет | `test_espocrm.py::test_repair_order_belongs_to_client_vehicle_and_appointment`, `test_repair_order_status_is_one_of_the_workshop_statuses`, `test_mechanic_changing_repair_status_calls_n8n_with_status_and_client_conversations`, `test_repair_order_saved_without_status_change_does_not_call_n8n` | passed |
+| Согласие на рекламу, ТО и шины (#33): Ассистент один раз на Клиента спрашивает Согласие при Записи (без календаря — при собранной Заявке), ответ и «STOP» ложатся в `Contact.marketingConsent`; напоминания о ТО через 11 месяцев после Записи и о сезоне шин (весна — летние, осень — зимние) уходят только Клиентам с Согласием, каждый повод один раз, WhatsApp — шаблоном, Messenger и Instagram — SMS; отказавшемуся больше не уходит; ручной запуск только с секретом | `test_marketing.py` (15), `test_delete_client.py::test_delete_client_erases_sent_marketing_reminders` | passed |
+| Согласие в настоящей EspoCRM (#33): API-пользователь находит Беседы Клиентов с Согласием на рекламу | `test_espocrm.py::test_api_user_finds_conversations_of_consented_clients_as_crm_adapter_does` | passed |
 | Фейк EspoCRM повторяет REST API: CRUD, обязательные поля, поиск `equals`/`notEquals`/`in`/`lessThan`/`greaterThan`/`greaterThanOrEquals`/`linkedWith`, `total` сверх `maxSize`, телефон в международном формате, связи (в том числе многие-ко-многим), 401 без ключа, 503 при недоступности CRM или одной сущности, медленная сущность | `test_fake_espocrm.py` (19) | passed |
 
 Флаки «не дождались за 30 с» в случайных тестах (запоздалый запрос предыдущего теста) — одна причина: фейк закрывал соединение первым, TIME_WAIT

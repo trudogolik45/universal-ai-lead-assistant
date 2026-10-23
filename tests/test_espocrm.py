@@ -14,6 +14,7 @@ from scripts.espocrm_knowledge import DEMO_CALENDAR, seed_calendar, seed_knowled
 from tests.booking import WORKING_CALENDAR_NODE, WORKING_RANGES_NODE, adapter_query, busy_where
 from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET, REPAIR_STATUS_PATH, TASK_DONE_PATH
 from tests.knowledge import assistant_knowledge_query
+from tests.marketing import consented_where, conversations_of_where
 from tests.owner_report import report_where
 from tests.polling import eventually, stays
 from tests.reminders import planned_where
@@ -185,6 +186,24 @@ def test_client_has_no_marketing_consent_until_given(espocrm):
     espocrm.api.update("Contact", client["id"], {"marketingConsent": True})
 
     assert espocrm.api.read("Contact", client["id"])["marketingConsent"] is True
+
+
+def test_api_user_finds_conversations_of_consented_clients_as_crm_adapter_does(espocrm):
+    agreed = espocrm.api.create("Contact", {"lastName": "Zgoda", "marketingConsent": True})
+    refused = espocrm.api.create("Contact", {"lastName": "Brak"})
+    for contact, sender_id in ((agreed, "48600333001"), (refused, "48600333002")):
+        espocrm.api.create("Conversation", {
+            "name": f"whatsapp · {sender_id}", "channel": "whatsapp", "senderId": sender_id, "contactId": contact["id"],
+        })
+
+    contacts = espocrm.api.find("Contact", consented_where(), select=["id"], maxSize=200)
+    conversations = espocrm.api.find(
+        "Conversation", conversations_of_where([c["id"] for c in contacts]), select=["channel", "senderId"], maxSize=200
+    )
+
+    assert agreed["id"] in {c["id"] for c in contacts} and refused["id"] not in {c["id"] for c in contacts}
+    senders = {(c["channel"], c["senderId"]) for c in conversations}
+    assert ("whatsapp", "48600333001") in senders and ("whatsapp", "48600333002") not in senders
 
 
 def test_n8n_works_as_api_user_without_admin_rights(espocrm):

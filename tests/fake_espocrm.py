@@ -1,5 +1,5 @@
 """Фейк REST API EspoCRM в фейк-сервере: записи в памяти, CRUD, обязательные поля, поиск
-(`equals`, `notEquals`, `in`, `lessThan`, `greaterThan`, `greaterThanOrEquals`, `linkedWith`), связи.
+(`equals`, `notEquals`, `in`, `isTrue`, `lessThan`, `greaterThan`, `greaterThanOrEquals`, `linkedWith`), связи.
 
 Подключён к фейк-серверу фикстурой `fake_server` (префикс /espocrm, env n8n ESPOCRM_BASE_URL).
 Тест читает записанное через `records(entity)` / `related(...)`, заводит своё через `add(...)`,
@@ -215,6 +215,8 @@ def condition_matches(record: dict, condition: dict) -> bool:
         return record.get(attribute) is not None and record[attribute] >= value
     if kind == "in":
         return record.get(attribute) in value
+    if kind == "isTrue":
+        return record.get(attribute) is True
     if kind == "linkedWith":
         # Связь многие-ко-многим (User.teams): id связанных записей лежат в <связь>Ids.
         return bool(set(record.get(attribute + "Ids") or []) & set(value))

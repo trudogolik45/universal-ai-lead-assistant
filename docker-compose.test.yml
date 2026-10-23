@@ -76,6 +76,7 @@ services:
       # Расписания retry и напоминаний в тестах не срабатывают (1 января): прогоны только по вебхуку.
       RETRY_SCHEDULE_CRON: ${RETRY_SCHEDULE_CRON:-0 0 1 1 *}
       REMINDER_SCHEDULE_CRON: ${REMINDER_SCHEDULE_CRON:-0 0 1 1 *}
+      MARKETING_SCHEDULE_CRON: ${MARKETING_SCHEDULE_CRON:-0 0 1 1 *}
       # Внешние API — фейк-сервер pytest на хосте (tests/fake_server.py).
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-http://host.docker.internal:9/openrouter}
       META_GRAPH_BASE_URL: ${META_GRAPH_BASE_URL:-http://host.docker.internal:9/meta}
