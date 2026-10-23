@@ -82,8 +82,10 @@ class Stand:
         wait_webhooks(url)
         return url
 
-    def up_espocrm(self) -> EspoCrmStand:
-        """EspoCRM с нуля: пустая база `espocrm` в Postgres стенда, установка, API-пользователь n8n."""
+    def up_espocrm(self, env: dict[str, str]) -> EspoCrmStand:
+        """EspoCRM с нуля: пустая база `espocrm` в Postgres стенда, установка, API-пользователь n8n.
+        env — подстановки docker-compose.test.yml (адрес вебхука ответа сотрудника)."""
+        self.env.update(env)
         recreate_database(self.up_postgres(), ESPOCRM_DATABASE)
         self.compose("up", "-d", "--build", "--force-recreate", "--renew-anon-volumes", "--wait", *ESPOCRM_SERVICES)
         url = f"http://{self.host_url('espocrm', 80)}"

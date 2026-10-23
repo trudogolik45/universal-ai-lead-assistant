@@ -8,7 +8,9 @@ import socket
 
 from scripts.espocrm_bootstrap import API_USER, ensure_api_user
 from scripts.espocrm_knowledge import seed_knowledge
+from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET
 from tests.knowledge import assistant_knowledge_query
+from tests.polling import eventually, stays
 
 
 def create_conversation(espocrm, sender_id: str) -> dict:
@@ -232,3 +234,37 @@ def test_demo_knowledge_base_is_seeded_once_and_keeps_owner_edits(espocrm):
     assert knowledge_total(espocrm) == total
     assert espocrm.admin.read("KnowledgeItem", oil["id"])["price"] == 130
     assert {item["kind"] for item in knowledge_base(espocrm.admin)} == {"service", "hours", "company", "faq", "rule"}
+
+
+def employee_replies(fake) -> list:
+    return fake.requests(EMPLOYEE_REPLY_PATH)
+
+
+def test_employee_message_in_conversation_calls_n8n_with_text_and_client_address(espocrm, fake):
+    conversation = create_conversation(espocrm, "psid-400")
+
+    # Сотрудник пишет из Беседы: направление и автора не выбирает.
+    message = espocrm.admin.create("Message", {"conversationId": conversation["id"], "text": "Auto gotowe do odbioru."})
+
+    [call] = eventually(lambda: employee_replies(fake))
+    assert call.method == "POST"
+    assert call.headers["X-Uala-Secret"] == EMPLOYEE_REPLY_SECRET
+    assert call.json() == {
+        "crm_message_id": message["id"],
+        "channel": "messenger",
+        "sender_id": "psid-400",
+        "text": "Auto gotowe do odbioru.",
+    }
+    saved = espocrm.admin.read("Message", message["id"])
+    assert (saved["direction"], saved["author"], bool(saved["sentAt"])) == ("out", "employee", True)
+
+
+def test_messages_written_by_n8n_do_not_call_n8n_back(espocrm, fake):
+    conversation = create_conversation(espocrm, "psid-410")
+
+    espocrm.api.create(
+        "Message",
+        {"conversationId": conversation["id"], "direction": "out", "author": "assistant", "text": "Wymiana oleju — 150 zł."},
+    )
+
+    stays(lambda: employee_replies(fake) == [])
