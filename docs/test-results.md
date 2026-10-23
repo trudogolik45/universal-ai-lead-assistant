@@ -6,11 +6,10 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17-21-crm-conversation` (после мержа #23), команда `uv run pytest -rs`.
-- Результат: **152 passed, 1 failed, 1 skipped** за 990 с (хост под нагрузкой, load average ~40).
-  Упал `test_crm_conversation.py::test_unavailable_crm_does_not_lose_messages_and_retry_writes_them_after_recovery`:
-  после #23 без CRM нет и Базы знаний, Ассистент молчит. Тест исправлен и перепрогнан вместе с
-  `test_knowledge_base.py`: 7 passed.
+- Дата: 2026-10-23, ветка `spec-17-22-lead-contact-vehicle`, команда `uv run pytest -rs`.
+- Результат: **165 passed, 1 failed, 1 skipped** за 1286 с (хост под нагрузкой, load average ~20–30).
+  Упал `test_handoff.py::test_unknown_question_hands_conversation_off_to_human`: `httpx.ReadTimeout`
+  на отправке вебхука Meta — нагрузка хоста, не код. `test_handoff.py` перепрогнан отдельно: 18 passed.
 - Skipped: `tests/test_lead_delivery_google.py::test_qualified_lead_row_is_read_back_from_real_spreadsheet` —
   запись в настоящую Google-таблицу и чтение обратно. Нужны `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_SHEETS_TEST_SPREADSHEET_ID`; service account и
