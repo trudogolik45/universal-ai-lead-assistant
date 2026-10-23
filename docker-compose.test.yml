@@ -54,21 +54,17 @@ services:
       WHATSAPP_ACCESS_TOKEN: test-whatsapp-token
       OPENROUTER_API_KEY: test-openrouter-key
       TELEGRAM_BOT_TOKEN: test-telegram-token
-      TELEGRAM_WEBHOOK_SECRET: test-telegram-webhook-secret
+      # Группа разработчиков для алерта «AI не отвечает».
+      ALERT_TELEGRAM_CHAT_ID: "-1009990000000"
       RETRY_WEBHOOK_SECRET: test-retry-secret
       ESPOCRM_API_KEY: test-espocrm-key
       EMPLOYEE_REPLY_SECRET: test-employee-reply-secret
       # Расписание retry в тестах не срабатывает (1 января): прогоны только по вебхуку.
       RETRY_SCHEDULE_CRON: ${RETRY_SCHEDULE_CRON:-0 0 1 1 *}
-      # Service account: ключ генерирует фикстура n8n_url (tests/google.py).
-      GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
-      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:-}
       # Внешние API — фейк-сервер pytest на хосте (tests/fake_server.py).
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-http://host.docker.internal:9/openrouter}
       META_GRAPH_BASE_URL: ${META_GRAPH_BASE_URL:-http://host.docker.internal:9/meta}
       TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-http://host.docker.internal:9/telegram}
-      GOOGLE_SHEETS_BASE_URL: ${GOOGLE_SHEETS_BASE_URL:-http://host.docker.internal:9/sheets}
-      GOOGLE_OAUTH_BASE_URL: ${GOOGLE_OAUTH_BASE_URL:-http://host.docker.internal:9/google-oauth}
       ESPOCRM_BASE_URL: ${ESPOCRM_BASE_URL:-http://host.docker.internal:9/espocrm}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -96,8 +92,9 @@ services:
       ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: tcp://*:7777
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: tcp://espocrm-websocket:7777
-      # Ответ сотрудника (хук модуля Uala): контрактные тесты подставляют фейк-сервер.
+      # Ответ сотрудника и закрытая Задача (хуки модуля Uala): контрактные тесты подставляют фейк-сервер.
       ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_URL: ${EMPLOYEE_REPLY_URL:-http://n8n:5678/webhook/employee-reply}
+      ESPOCRM_CONFIG_UALA_TASK_DONE_URL: ${TASK_DONE_URL:-http://n8n:5678/webhook/task-done}
       ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_SECRET: test-employee-reply-secret
     volumes:
       - /var/www/html/data

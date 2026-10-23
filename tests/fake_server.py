@@ -1,7 +1,7 @@
-"""Фейк внешних API (OpenRouter, Meta Graph, Telegram, Google Sheets, CRM) на хосте.
+"""Фейк внешних API (OpenRouter, Meta Graph, Telegram, EspoCRM) на хосте.
 
-Один HTTP-сервер, у каждого API свой префикс пути: /openrouter, /meta, /telegram, /sheets,
-/google-oauth (токен service account), /crm, /espocrm (REST API EspoCRM).
+Один HTTP-сервер, у каждого API свой префикс пути: /openrouter, /meta, /telegram,
+/espocrm (REST API EspoCRM), /n8n (вебхуки, которые хуки EspoCRM шлют n8n).
 n8n ходит сюда по базовым URL из env (`*_BASE_URL`), см. `FakeServer.base_urls`.
 
 Тест задаёт ответы через `respond` и читает полученные запросы через `requests`.
@@ -21,8 +21,6 @@ BASE_URL_ENV = {
     "OPENROUTER_BASE_URL": "/openrouter",
     "META_GRAPH_BASE_URL": "/meta",
     "TELEGRAM_API_BASE_URL": "/telegram",
-    "GOOGLE_SHEETS_BASE_URL": "/sheets",
-    "GOOGLE_OAUTH_BASE_URL": "/google-oauth",
     "ESPOCRM_BASE_URL": "/espocrm",
 }
 
@@ -87,7 +85,7 @@ class FakeServer:
             return [r for r in self._requests if r.path.startswith(path_prefix)]
 
     def container_url(self, path: str = "") -> str:
-        """URL фейка для n8n в контейнере (например, crm_webhook_url Заказчика)."""
+        """URL фейка для контейнеров стенда (например, адрес вебхука для хука EspoCRM)."""
         return f"http://{CONTAINER_HOST}:{self.port}{path}"
 
     def base_urls(self) -> dict[str, str]:

@@ -8,7 +8,9 @@ from scripts.espocrm import EspoCrm
 ESPOCRM_ADMIN = ("admin", "test-espocrm-admin")
 # Куда хук EspoCRM шлёт Сообщение сотрудника: в контрактных тестах — фейк-сервер вместо n8n.
 EMPLOYEE_REPLY_PATH = "/n8n/webhook/employee-reply"
-# Секрет вебхука из docker-compose.test.yml: его же ждёт n8n.
+# Куда хук EspoCRM шлёт закрытую Задачу человеку.
+TASK_DONE_PATH = "/n8n/webhook/task-done"
+# Секрет вебхуков хуков из docker-compose.test.yml: его же ждёт n8n.
 EMPLOYEE_REPLY_SECRET = "test-employee-reply-secret"
 
 
