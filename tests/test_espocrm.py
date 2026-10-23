@@ -4,11 +4,15 @@
 (scripts/espocrm_bootstrap.py) — те же, что в проде. Фикстура `espocrm` — tests/conftest.py.
 """
 
+import json
 import socket
+import uuid
 
+from scripts.espocrm import EspoCrm
 from scripts.espocrm_bootstrap import API_USER, ensure_api_user
 from scripts.espocrm_knowledge import seed_knowledge
 from tests.knowledge import assistant_knowledge_query
+from tests.polling import eventually
 
 
 def create_conversation(espocrm, sender_id: str) -> dict:
@@ -163,6 +167,116 @@ def websocket_handshake(address: str) -> str:
         sock.sendall(request.encode())
         # За заголовками сервер сразу шлёт двоичный кадр WAMP: читаем только статусную строку.
         return sock.recv(1024).split(b"\r\n")[0].decode()
+
+
+EMPLOYEE_PASSWORD = "test-employee-1"
+
+
+def employee(espocrm, team_name: str, open_tasks: int = 0) -> dict:
+    """Сотрудник Заказчика в команде (группе): его заводит администратор CRM."""
+    team = espocrm.admin.find("Team", [{"type": "equals", "attribute": "name", "value": team_name}])[0]
+    user = espocrm.admin.create(
+        "User",
+        {
+            "userName": f"{team_name.lower()}-{uuid.uuid4().hex[:6]}",
+            "lastName": "Kowalska",
+            "type": "regular",
+            "isActive": True,
+            "password": EMPLOYEE_PASSWORD,
+            "passwordConfirm": EMPLOYEE_PASSWORD,
+            "teamsIds": [team["id"]],
+        },
+    )
+    for _ in range(open_tasks):
+        espocrm.admin.create("Task", {"name": "Wcześniejsze zadanie", "status": "Started", "assignedUserId": user["id"]})
+    return user
+
+
+def find_ids(client, entity: str, where: list[dict], **params) -> list[str]:
+    return [record["id"] for record in client.find(entity, where, select=["id"], **params)]
+
+
+def test_api_user_finds_active_team_members_as_crm_adapter_does(espocrm):
+    team_id = find_ids(espocrm.api, "Team", [{"type": "equals", "attribute": "name", "value": "Administratorzy"}])[0]
+    member = employee(espocrm, "Administratorzy")
+    inactive = employee(espocrm, "Administratorzy")
+    espocrm.admin.update("User", inactive["id"], {"isActive": False})
+    mechanic = employee(espocrm, "Mechanicy")
+
+    members = find_ids(
+        espocrm.api,
+        "User",
+        [
+            {"type": "linkedWith", "attribute": "teams", "value": [team_id]},
+            {"type": "equals", "attribute": "isActive", "value": True},
+        ],
+        orderBy="userName",
+        order="asc",
+        maxSize=200,
+    )
+
+    assert member["id"] in members
+    assert {inactive["id"], mechanic["id"]}.isdisjoint(members)
+
+
+def test_api_user_counts_open_tasks_of_employee_as_crm_adapter_does(espocrm):
+    user = employee(espocrm, "Administratorzy", open_tasks=2)
+    espocrm.admin.create("Task", {"name": "Zrobione", "status": "Completed", "assignedUserId": user["id"]})
+
+    found = espocrm.api.request(
+        "GET",
+        "Task",
+        params={
+            "searchParams": json.dumps(
+                {
+                    "where": [
+                        {"type": "equals", "attribute": "assignedUserId", "value": user["id"]},
+                        {"type": "in", "attribute": "status", "value": ["Not Started", "Started"]},
+                    ],
+                    "select": ["id"],
+                    "maxSize": 1,
+                }
+            )
+        },
+    )
+
+    assert found["total"] == 2
+
+
+def test_handoff_task_links_to_conversation_and_notifies_assigned_employee(espocrm):
+    conversation = create_conversation(espocrm, "psid-240")
+    user = employee(espocrm, "Administratorzy")
+    team_id = user["teamsIds"][0]
+
+    task = espocrm.api.create(
+        "Task",
+        {
+            "name": "Przekazanie rozmowy: Jan Kowalski",
+            "description": "Powód: klient prosi o człowieka",
+            "status": "Not Started",
+            "parentType": "Conversation",
+            "parentId": conversation["id"],
+            "assignedUserId": user["id"],
+            "teamsIds": [team_id],
+        },
+    )
+
+    assert [t["id"] for t in espocrm.api.related("Conversation", conversation["id"], "tasks")] == [task["id"]]
+    as_employee = EspoCrm(espocrm.url, admin=(user["userName"], EMPLOYEE_PASSWORD))
+    assert eventually(lambda: task["id"] in notified_records(as_employee))
+
+
+def notified_records(client) -> list[str]:
+    """id записей, о которых сотруднику пришли уведомления CRM."""
+    notifications = client.request("GET", "Notification", params={"maxSize": 50})["list"]
+    return [n["relatedParentId"] for n in notifications]
+
+
+def test_crm_emails_employee_about_assigned_task(espocrm):
+    """Письмо уходит job-ом SendEmailNotifications через SMTP CRM; тут — что Task в списке рассылки."""
+    settings = espocrm.admin.request("GET", "Settings")
+
+    assert "Task" in settings["assignmentEmailNotificationsEntityList"]
 
 
 def create_knowledge_item(espocrm, **fields) -> dict:

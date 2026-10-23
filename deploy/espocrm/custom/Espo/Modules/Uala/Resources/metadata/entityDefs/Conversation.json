@@ -62,6 +62,11 @@
             "entity": "Message",
             "foreign": "conversation"
         },
+        "tasks": {
+            "type": "hasChildren",
+            "entity": "Task",
+            "foreign": "parent"
+        },
         "createdBy": {
             "type": "belongsTo",
             "entity": "User"
