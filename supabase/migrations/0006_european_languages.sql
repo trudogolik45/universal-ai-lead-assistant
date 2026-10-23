@@ -1,5 +1,5 @@
 -- Ассистент отвечает на любом языке Европы (ISO 639-1). Список совпадает с HANDOFF_NOTICES
--- в n8n/workflows/meta-webhook.json («Build prompt»).
+-- в n8n/workflows/handle-message.json («Build prompt»).
 alter table companies drop constraint companies_default_language_check;
 alter table companies add constraint companies_default_language_check check (default_language in (
     'pl', 'en', 'ru', 'uk', 'be', 'de', 'fr', 'es', 'it', 'pt', 'ca', 'nl', 'da', 'sv', 'no', 'is', 'fi', 'et',
