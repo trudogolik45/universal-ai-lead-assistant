@@ -21,6 +21,7 @@ from tests.booking import (
     working_calendar,
 )
 from tests.factories import create_company
+from tests.marketing import CONSENT_QUESTION
 from tests.meta import MetaClient, messenger_payload
 from tests.openrouter import assistant_reply, completion_requests, respond_with
 from tests.polling import eventually, stays
@@ -29,6 +30,8 @@ PAGE_ID = "page-280"
 SEND_API_PATH = "/meta/me/messages"
 PHONE_GIVEN = {"name": "Jan Kowalski", "phone": "+48600123456", "vehicle_brand": "Skoda", "vehicle_model": "Octavia"}
 BOOKED = "Zapisałem Pana na poniedziałek na 10:00. Do zobaczenia!"
+# Ответ о Записи уходит с вопросом о Согласии на рекламу: Клиента спрашивают один раз (#33).
+BOOKED_REPLY = f"{BOOKED}\n\n{CONSENT_QUESTION['pl']}"
 # Ответ Клиенту, чей слот только что занял другой (узел «Booking result» в handle-message).
 SLOT_TAKEN = "Przepraszam, ten termin został właśnie zajęty. Proszę wybrać inny wolny termin."
 
@@ -125,7 +128,7 @@ def test_client_is_booked_into_free_slot_as_meeting_of_client_and_vehicle(fake, 
 
     reply = say(fake, meta, client, "Tak, poniedziałek 10:00 pasuje")
 
-    assert reply == BOOKED
+    assert reply == BOOKED_REPLY
     [booked] = crm.records("Meeting")
     assert (booked["dateStart"], booked["dateEnd"], booked["status"]) == (utc(start), utc(start, 1), "Planned")
     [contact] = eventually(lambda: crm.records("Contact"))
@@ -187,6 +190,6 @@ def test_two_clients_do_not_get_the_same_slot(fake, crm, meta, client, other_cli
         for thread in threads:
             thread.join()
         eventually(lambda: all(len(replies(fake, sender)) == 2 for sender in (client, other_client)), timeout=60)
-    assert sorted(replies(fake, sender)[1] for sender in (client, other_client)) == sorted([BOOKED, SLOT_TAKEN])
+    assert sorted(replies(fake, sender)[1] for sender in (client, other_client)) == sorted([BOOKED_REPLY, SLOT_TAKEN])
     assert len(crm.records("Meeting")) == 1
     assert len(completion_requests(fake)) == 4
