@@ -27,6 +27,8 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 | `handle-message` | вызов из других workflow | Заказчик по странице → Сообщение в Беседу → База знаний из EspoCRM → OpenRouter → ответ Клиенту, Заявка, Передача человеку; входящее и ответ — в CRM через `write-message-to-crm` |
 | `write-message-to-crm` | вызов из других workflow | Сообщение из Postgres в Беседу Клиента в CRM через переходник; не вышло — остаётся недописанным (`messages.crm_message_id` пуст) для retry |
 | `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операция `record_message`: найти или создать Беседу по Каналу и id Клиента, добавить Сообщение |
+| `employee-reply` | `POST /webhook/employee-reply` | Ответ сотрудника из EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа переходит в режим человека, Ассистент в ней молчит, текст — Клиенту через `send-to-client` |
+| `send-to-client` | вызов из других workflow | Текст Клиенту в его Канал (сейчас Messenger); позже 24 часов после сообщения Клиента — с меткой `HUMAN_AGENT` |
 | `deliver-lead` | вызов из других workflow | Заявка в Google-таблицу, затем в CRM-webhook |
 | `notify-lead` | вызов из других workflow | Уведомление о Заявке или Передаче человеку в группу Telegram |
 | `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram |
@@ -39,7 +41,10 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 У Клиента (`Contact`) есть поле Согласие на рекламу (`marketingConsent`). n8n ходит в EspoCRM по
 REST API под API-пользователем `n8n`, только через переходник `crm-adapter-espocrm`. Сообщения
 в Беседе упорядочены по времени отправки (`Message.sentAt`), а не записи: дописанное retry встаёт
-на своё место.
+на своё место. Сообщение, которое сотрудник пишет в Беседе, хуки модуля Uala помечают исходящим
+от сотрудника и сразу (таймаут 2 с) отправляют в n8n (`employee-reply`); встроенные webhooks
+EspoCRM не используются — они уходят по расписанию. n8n не ответил — ошибка в логе EspoCRM,
+повтора нет.
 
 Секреты — только в `.env` на VPS и в credentials n8n; в репо их нет. Имена и назначение всех
 переменных — `.env.example`.

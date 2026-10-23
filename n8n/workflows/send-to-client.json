@@ -1,0 +1,137 @@
+{
+  "id": "uala0sendClient0",
+  "name": "Send to client",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "5e7d0c11-0000-4000-8000-000000000001",
+      "name": "Message to send",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "conversation_id",
+              "type": "string"
+            },
+            {
+              "name": "text",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5e7d0c11-0000-4000-8000-000000000002",
+      "name": "Load recipient",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Кому и куда: Канал и id Клиента в нём, аккаунт Заказчика в Канале, язык Беседы.\n-- in_window — с последнего сообщения Клиента прошло меньше 24 часов: Meta пускает свободный текст\n-- только в это окно, дальше Messenger принимает лишь ответ человека с меткой HUMAN_AGENT.\nselect v.channel, v.sender_id,\n  case v.channel\n    when 'messenger' then c.messenger_page_id\n    when 'whatsapp' then c.whatsapp_phone_number_id\n    when 'instagram' then c.instagram_account_id\n  end as account_id,\n  coalesce(v.language, c.default_language) as language,\n  coalesce((select max(created_at) from messages\n            where conversation_id = v.id and direction = 'in') > now() - interval '24 hours', false) as in_window,\n  $2 as text\nfrom conversations v\njoin companies c on c.id = v.company_id\nwhere v.id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [$json.conversation_id, $json.text] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "5e7d0c11-0000-4000-8000-000000000003",
+      "name": "Build channel request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Запрос в API Канала: { url, token_env, body }. Токен узел отправки берёт из $env[token_env],\n// в данные выполнения он не попадает. Новый Канал = новая функция в CHANNELS.\nconst GRAPH = $env.META_GRAPH_BASE_URL;\n\n// Вне окна 24 часов Messenger пускает только ответ человека с меткой HUMAN_AGENT (до 7 дней).\n// Ответ Ассистента всегда в окне: он идёт сразу за сообщением Клиента.\nfunction messenger(m) {\n  const type = m.in_window ? { messaging_type: 'RESPONSE' } : { messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' };\n  return {\n    url: `${GRAPH}/me/messages`,\n    token_env: 'META_PAGE_ACCESS_TOKEN',\n    body: { recipient: { id: m.sender_id }, ...type, message: { text: m.text } },\n  };\n}\n\nconst CHANNELS = { messenger };\nconst build = CHANNELS[$json.channel];\nif (!build) throw new Error(`Канал ${$json.channel}: отправка не поддерживается`);\nreturn { json: build($json) };"
+      }
+    },
+    {
+      "id": "5e7d0c11-0000-4000-8000-000000000004",
+      "name": "Send to channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env[$json.token_env] }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Message to send": {
+      "main": [
+        [
+          {
+            "node": "Load recipient",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load recipient": {
+      "main": [
+        [
+          {
+            "node": "Build channel request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build channel request": {
+      "main": [
+        [
+          {
+            "node": "Send to channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

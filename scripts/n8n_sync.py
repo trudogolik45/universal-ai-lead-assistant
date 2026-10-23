@@ -43,6 +43,7 @@ SECRET_ENV = (
     "ESPOCRM_DB_PASSWORD",
     "ESPOCRM_ADMIN_PASSWORD",
     "ESPOCRM_API_KEY",
+    "EMPLOYEE_REPLY_SECRET",
 )
 
 # Короче — не ищем: короткая строка («test») встречается в любом JSON и даёт ложную тревогу.
