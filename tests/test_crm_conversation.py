@@ -42,12 +42,14 @@ def conversations(crm, sender_id):
 
 
 def conversation_messages(crm, sender_id):
-    """Сообщения Беседы Клиента в CRM по порядку: (направление, автор, текст)."""
+    """Сообщения Беседы Клиента в CRM: (направление, автор, текст), отсортированы.
+    Порядок в Беседе — по sentAt (контракт — tests/test_espocrm.py), но с точностью до секунды:
+    фейковый AI отвечает в ту же секунду, и порядок внутри неё не определён."""
     found = conversations(crm, sender_id)
     if len(found) != 1:
         return []
-    messages = crm.related("Conversation", found[0]["id"], "messages", order_by="sentAt")
-    return [(m["direction"], m["author"], m["text"]) for m in messages]
+    messages = crm.related("Conversation", found[0]["id"], "messages")
+    return sorted((m["direction"], m["author"], m["text"]) for m in messages)
 
 
 def replies_sent(fake):
@@ -69,8 +71,10 @@ def test_client_message_and_assistant_reply_appear_in_one_conversation(fake, crm
         ("in", "client", "Ile kosztuje wymiana oleju?"),
         ("out", "assistant", "Dzień dobry, w czym pomóc?"),
     ]
-    incoming = crm.related("Conversation", conversations(crm, client)[0]["id"], "messages", order_by="sentAt")[0]
-    assert incoming["providerMessageId"] == mid
+    messages = crm.related("Conversation", conversations(crm, client)[0]["id"], "messages")
+    by_direction = {m["direction"]: m for m in messages}
+    assert by_direction["in"]["providerMessageId"] == mid
+    assert by_direction["in"]["sentAt"] <= by_direction["out"]["sentAt"]
 
 
 def test_next_message_of_client_goes_to_the_same_conversation(fake, crm, meta, client):
@@ -82,8 +86,10 @@ def test_next_message_of_client_goes_to_the_same_conversation(fake, crm, meta, c
 
     eventually(lambda: len(conversation_messages(crm, client)) == 4)
     assert len(conversations(crm, client)) == 1
-    assert conversation_messages(crm, client)[2:] == [
+    assert conversation_messages(crm, client) == [
         ("in", "client", "Czy jutro jest wolne?"),
+        ("in", "client", "Dzień dobry"),
+        ("out", "assistant", "Dzień dobry!"),
         ("out", "assistant", "Zapraszamy jutro."),
     ]
 

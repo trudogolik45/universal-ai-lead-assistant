@@ -1,4 +1,4 @@
-"""Фейк REST API EspoCRM в фейк-сервере: записи в памяти, CRUD, поиск по `equals`, связи.
+"""Фейк REST API EspoCRM в фейк-сервере: записи в памяти, CRUD, обязательные поля, поиск по `equals`, связи.
 
 Подключён к фейк-серверу фикстурой `fake_server` (префикс /espocrm, env n8n ESPOCRM_BASE_URL).
 Тест читает записанное через `records(entity)` / `related(...)`, недоступность CRM — `unavailable()`.
@@ -17,6 +17,13 @@ from tests.fake_server import Request, Response
 
 # Значение из docker-compose.test.yml (ESPOCRM_API_KEY n8n стенда).
 API_KEY = "test-espocrm-key"
+
+# Обязательные поля (entityDefs модуля Uala): без них настоящая EspoCRM отвечает 400.
+REQUIRED = {
+    "Conversation": ("name", "channel", "senderId"),
+    "Message": ("conversationId", "direction", "author", "text"),
+    "Vehicle": ("name",),
+}
 
 # Связь hasMany (сущность, связь) → (связанная сущность, поле со ссылкой на родителя).
 LINKS = {
@@ -72,7 +79,7 @@ class FakeEspoCrm:
     def _route(self, method: str, parts: list[str], params: dict, body: bytes) -> Response:
         match method, parts:
             case "POST", [entity]:
-                return Response(200, self._create(entity, json.loads(body or b"{}")))
+                return self._create(entity, json.loads(body or b"{}"))
             case "GET", [entity]:
                 return Response(200, as_list(self._search(entity, search_params(params))))
             case "GET", [entity, record_id]:
@@ -83,10 +90,12 @@ class FakeEspoCrm:
                 return Response(200, as_list(self._related(entity, record_id, link, params.get("orderBy"))))
         return Response(404, None)
 
-    def _create(self, entity: str, data: dict) -> dict:
+    def _create(self, entity: str, data: dict) -> Response:
+        if any(data.get(field) in (None, "") for field in REQUIRED.get(entity, ())):
+            return Response(400, None)
         record = {**data, "id": uuid.uuid4().hex[:17], "createdAt": now()}
         self._records.setdefault(entity, {})[record["id"]] = record
-        return dict(record)
+        return Response(200, dict(record))
 
     def _read(self, entity: str, record_id: str) -> Response:
         record = self._records.get(entity, {}).get(record_id)
@@ -132,7 +141,7 @@ def matches(record: dict, where: list[dict]) -> bool:
     for condition in where:
         if condition["type"] != "equals":
             raise NotImplementedError(f"Фейк EspoCRM не знает условие {condition['type']}")
-        if record.get(condition["attribute"]) != condition["value"]:
+        if record.get(condition["attribute"]) != condition.get("value"):
             return False
     return True
 

@@ -33,20 +33,28 @@ def api(server, crm):
         yield client
 
 
+def conversation(channel, sender_id):
+    return {"name": f"{channel} · {sender_id}", "channel": channel, "senderId": sender_id}
+
+
+def message(conversation_id, text, sent_at):
+    return {"conversationId": conversation_id, "direction": "in", "author": "client", "text": text, "sentAt": sent_at}
+
+
 def search(api, entity, where, **params):
     return api.get(entity, params={"searchParams": json.dumps({"where": where, **params})})
 
 
 def test_created_record_gets_id_and_reads_back(api):
-    created = api.post("Conversation", json={"channel": "messenger", "senderId": "psid-1"}).json()
+    created = api.post("Conversation", json=conversation("messenger", "psid-1")).json()
 
     assert created["id"]
     assert api.get(f"Conversation/{created['id']}").json() == created
 
 
 def test_search_filters_by_equal_attributes(api):
-    api.post("Conversation", json={"channel": "messenger", "senderId": "psid-1"})
-    wanted = api.post("Conversation", json={"channel": "instagram", "senderId": "psid-1"}).json()
+    api.post("Conversation", json=conversation("messenger", "psid-1"))
+    wanted = api.post("Conversation", json=conversation("instagram", "psid-1")).json()
 
     found = search(
         api,
@@ -61,7 +69,7 @@ def test_search_filters_by_equal_attributes(api):
 
 
 def test_search_understands_where_in_query_brackets(api):
-    wanted = api.post("Conversation", json={"channel": "messenger", "senderId": "psid-2"}).json()
+    wanted = api.post("Conversation", json=conversation("messenger", "psid-2")).json()
 
     found = api.get(
         "Conversation",
@@ -72,21 +80,28 @@ def test_search_understands_where_in_query_brackets(api):
 
 
 def test_related_messages_of_conversation_are_ordered(api):
-    conversation = api.post("Conversation", json={"channel": "messenger", "senderId": "psid-3"}).json()
-    api.post("Message", json={"conversationId": conversation["id"], "text": "druga", "sentAt": "2026-10-23 10:00:05"})
-    api.post("Message", json={"conversationId": conversation["id"], "text": "pierwsza", "sentAt": "2026-10-23 10:00:01"})
+    created = api.post("Conversation", json=conversation("messenger", "psid-3")).json()
+    for text, sent_at in (("druga", "2026-10-23 10:00:05"), ("pierwsza", "2026-10-23 10:00:01")):
+        api.post("Message", json=message(created["id"], text, sent_at))
 
-    related = api.get(f"Conversation/{conversation['id']}/messages", params={"orderBy": "sentAt"}).json()
+    related = api.get(f"Conversation/{created['id']}/messages", params={"orderBy": "sentAt"}).json()
 
     assert [m["text"] for m in related["list"]] == ["pierwsza", "druga"]
 
 
 def test_update_changes_only_given_fields(api):
-    created = api.post("Conversation", json={"channel": "messenger", "senderId": "psid-4"}).json()
+    created = api.post("Conversation", json=conversation("messenger", "psid-4")).json()
 
     api.put(f"Conversation/{created['id']}", json={"senderId": "psid-5"})
 
     assert api.get(f"Conversation/{created['id']}").json() == {**created, "senderId": "psid-5"}
+
+
+def test_record_without_required_fields_is_rejected(api, crm):
+    response = api.post("Conversation", json={"channel": "messenger"})
+
+    assert response.status_code == 400
+    assert crm.records("Conversation") == []
 
 
 def test_unknown_record_is_not_found(api):
@@ -99,7 +114,7 @@ def test_request_without_api_key_is_unauthorized(api):
 
 def test_unavailable_crm_answers_503_and_keeps_no_records(api, crm):
     with crm.unavailable():
-        response = api.post("Conversation", json={"channel": "messenger", "senderId": "psid-6"})
+        response = api.post("Conversation", json=conversation("messenger", "psid-6"))
 
     assert response.status_code == 503
     assert crm.records("Conversation") == []
@@ -112,7 +127,7 @@ def test_explicit_route_overrides_mounted_fake(server, api):
 
 
 def test_reset_of_server_forgets_records(server, api, crm):
-    api.post("Conversation", json={"channel": "messenger", "senderId": "psid-7"})
+    api.post("Conversation", json=conversation("messenger", "psid-7"))
 
     server.reset()
 

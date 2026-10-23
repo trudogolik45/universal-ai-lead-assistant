@@ -682,7 +682,7 @@
       "typeVersion": 1.2,
       "position": [
         3080,
-        -100
+        700
       ],
       "parameters": {
         "workflowId": {
@@ -833,11 +833,6 @@
       "main": [
         [
           {
-            "node": "Write reply to CRM",
-            "type": "main",
-            "index": 0
-          },
-          {
             "node": "Reply mode auto",
             "type": "main",
             "index": 0
@@ -849,6 +844,11 @@
           },
           {
             "node": "Needs human",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write reply to CRM",
             "type": "main",
             "index": 0
           }
