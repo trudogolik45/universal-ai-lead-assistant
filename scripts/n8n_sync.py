@@ -15,6 +15,7 @@ import json
 import re
 import shlex
 import subprocess
+import time
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -113,13 +114,25 @@ def push(n8n: N8n, workflows_dir: Path = WORKFLOWS_DIR) -> None:
     for path in paths:
         import_file(n8n, "import:workflow", path.read_text())
     for path in paths:
-        n8n.run(f"n8n publish:workflow --id={shlex.quote(json.loads(path.read_text())['id'])}")
+        run_cli(n8n, f"n8n publish:workflow --id={shlex.quote(json.loads(path.read_text())['id'])}")
     n8n.restart()
 
 
 def import_file(n8n: N8n, command: str, content: str) -> None:
     """Файл передаётся через stdin, а не аргументом: секреты не попадают в списки процессов."""
-    n8n.run(f"cat > {TMP_FILE} && n8n {command} --input={TMP_FILE}; status=$?; rm -f {TMP_FILE}; exit $status", content)
+    run_cli(n8n, f"cat > {TMP_FILE} && n8n {command} --input={TMP_FILE}; status=$?; rm -f {TMP_FILE}; exit $status", content)
+
+
+def run_cli(n8n: N8n, command: str, input: str | None = None, attempts: int = 5, pause: float = 2) -> str:
+    """CLI n8n пишет в ту же SQLite, что и работающий сервер: под нагрузкой хоста сервер держит её
+    дольше таймаута CLI, и тот падает с SQLITE_BUSY. Такой сбой повторяем, остальные — нет."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return n8n.run(command, input)
+        except RuntimeError as error:
+            if "SQLITE_BUSY" not in str(error) or attempt == attempts:
+                raise
+            time.sleep(pause * attempt)
 
 
 def pull(n8n: N8n, workflows_dir: Path = WORKFLOWS_DIR) -> list[Path]:

@@ -125,6 +125,15 @@ update companies set reply_mode = 'silent' where slug = 'uniwersalny-serwis';
 update companies set default_language = 'en' where slug = 'uniwersalny-serwis';
 ```
 
+## Отзыв в Google (`companies.google_review_url`)
+
+Ссылка «оставить отзыв» профиля компании в Google (Google Business Profile → «Poproś o opinie»).
+Её получает Клиент, оценивший ремонт на 4 или 5. Пусто — Клиент получает только спасибо.
+
+```sql
+update companies set google_review_url = 'https://g.page/r/<id>/review' where slug = 'uniwersalny-serwis';
+```
+
 ## Модель AI (`companies.ai_model`)
 
 Идентификатор модели OpenRouter, по умолчанию `openai/gpt-6-luna`. Модель должна поддерживать

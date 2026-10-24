@@ -470,6 +470,83 @@
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Оценки 1–3 без Задачи в CRM (CRM лежала, сбой n8n): попытка старше 5 минут.\nselect company_id, crm_repair_order_id from repair_ratings\nwhere rating <= 3 and crm_task_id is null\n  and coalesce(task_claimed_at, rated_at) < now() - interval '5 minutes'\norder by rated_at\nlimit 200",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0032-4000-8000-000000000001",
+      "name": "Find bad ratings without task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        1700
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0ratingTask0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "company_id": "={{ $json.company_id }}",
+            "crm_repair_order_id": "={{ $json.crm_repair_order_id }}"
+          },
+          "matchingColumns": [
+            "company_id",
+            "crm_repair_order_id"
+          ],
+          "schema": [
+            {
+              "id": "company_id",
+              "displayName": "company_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "crm_repair_order_id",
+              "displayName": "crm_repair_order_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "a1b2c3d4-0032-4000-8000-000000000002",
+      "name": "Create rating task",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        1700
+      ]
     }
   ],
   "connections": {
@@ -556,6 +633,11 @@
             "node": "Find leads not in CRM",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Find bad ratings without task",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -609,6 +691,17 @@
         [
           {
             "node": "Write lead to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find bad ratings without task": {
+      "main": [
+        [
+          {
+            "node": "Create rating task",
             "type": "main",
             "index": 0
           }

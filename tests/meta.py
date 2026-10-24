@@ -84,6 +84,21 @@ def whatsapp_payload(phone_number_id: str, wa_id: str, text: str, wamid: str | N
     })
 
 
+def whatsapp_button_payload(phone_number_id: str, wa_id: str, text: str) -> dict:
+    """Вебхук WhatsApp: Клиент нажал кнопку быстрого ответа шаблона с подписью text."""
+    return whatsapp_change(phone_number_id, {
+        "contacts": [{"profile": {"name": "Klient"}, "wa_id": wa_id}],
+        "messages": [{
+            "context": {"from": "48500100200", "id": new_wamid()},
+            "from": wa_id,
+            "id": new_wamid(),
+            "timestamp": str(int(time.time())),
+            "type": "button",
+            "button": {"payload": text, "text": text},
+        }],
+    })
+
+
 def whatsapp_status_payload(phone_number_id: str, wa_id: str) -> dict:
     """Вебхук WhatsApp о доставке исходящего: сообщения Клиента в нём нет."""
     return whatsapp_change(phone_number_id, {
