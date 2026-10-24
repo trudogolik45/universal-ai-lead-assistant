@@ -79,108 +79,6 @@
       }
     },
     {
-      "id": "c7d2a1e0-0000-4000-8000-000000000004",
-      "name": "Find conversation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        440,
-        200
-      ],
-      "parameters": {
-        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Conversation",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "searchParams",
-              "value": "={{ JSON.stringify({ where: [ { type: 'equals', attribute: 'channel', value: $json.data.channel }, { type: 'equals', attribute: 'senderId', value: $json.data.sender_id } ], select: ['id'], maxSize: 1 }) }}"
-            }
-          ]
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Api-Key",
-              "value": "={{ $env.ESPOCRM_API_KEY }}"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1000
-    },
-    {
-      "id": "c7d2a1e0-0000-4000-8000-000000000005",
-      "name": "Conversation exists",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        660,
-        200
-      ],
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "combinator": "and",
-          "conditions": [
-            {
-              "id": "c2",
-              "leftValue": "={{ $json.total > 0 }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ]
-        },
-        "options": {}
-      }
-    },
-    {
-      "id": "c7d2a1e0-0000-4000-8000-000000000006",
-      "name": "Create conversation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        880,
-        300
-      ],
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Conversation",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Api-Key",
-              "value": "={{ $env.ESPOCRM_API_KEY }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: $('CRM operation').item.json.data.channel + ' · ' + $('CRM operation').item.json.data.sender_id, channel: $('CRM operation').item.json.data.channel, senderId: $('CRM operation').item.json.data.sender_id }) }}",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1000
-    },
-    {
       "id": "c7d2a1e0-0000-4000-8000-000000000007",
       "name": "Create message",
       "type": "n8n-nodes-base.httpRequest",
@@ -469,108 +367,6 @@
       "parameters": {
         "jsCode": "// Наименее загруженный: меньше всего открытых задач; при равенстве — первый по имени пользователя.\nconst members = $('Team members').all();\nconst loads = $input.all().map((item) => item.json.total);\nconst index = loads.indexOf(Math.min(...loads));\nreturn [{ json: { assigned_user_id: members[index].json.user_id } }];"
       }
-    },
-    {
-      "id": "c7d2a1e0-0000-4000-8000-000000000110",
-      "name": "Find task conversation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2200,
-        600
-      ],
-      "parameters": {
-        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Conversation",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "searchParams",
-              "value": "={{ JSON.stringify({ where: [ { type: 'equals', attribute: 'channel', value: $('CRM operation').first().json.data.channel }, { type: 'equals', attribute: 'senderId', value: $('CRM operation').first().json.data.sender_id } ], select: ['id'], maxSize: 1 }) }}"
-            }
-          ]
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Api-Key",
-              "value": "={{ $env.ESPOCRM_API_KEY }}"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1000
-    },
-    {
-      "id": "c7d2a1e0-0000-4000-8000-000000000111",
-      "name": "Task conversation exists",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        2420,
-        600
-      ],
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "combinator": "and",
-          "conditions": [
-            {
-              "id": "c111",
-              "leftValue": "={{ $json.total > 0 }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ]
-        },
-        "options": {}
-      }
-    },
-    {
-      "id": "c7d2a1e0-0000-4000-8000-000000000112",
-      "name": "Create task conversation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2640,
-        700
-      ],
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Conversation",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Api-Key",
-              "value": "={{ $env.ESPOCRM_API_KEY }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: $('CRM operation').first().json.data.channel + ' · ' + $('CRM operation').first().json.data.sender_id, channel: $('CRM operation').first().json.data.channel, senderId: $('CRM operation').first().json.data.sender_id }) }}",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1000
     },
     {
       "id": "c7d2a1e0-0000-4000-8000-000000000113",
@@ -2122,6 +1918,118 @@
         400
       ],
       "id": "c7d2a1e0-0031-4000-8000-000000000001"
+    },
+    {
+      "id": "206fc4c8-fd26-48ce-9f0e-8e9deb699426",
+      "name": "Conversation of client",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        200
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmConversn",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "={{ $('CRM operation').item.json.data.channel }}",
+            "sender_id": "={{ $('CRM operation').item.json.data.sender_id }}"
+          },
+          "matchingColumns": [
+            "channel",
+            "sender_id"
+          ],
+          "schema": [
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sender_id",
+              "displayName": "sender_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "b34b8337-49ad-42e0-99ba-423a95c3bce8",
+      "name": "Task conversation",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2200,
+        600
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmConversn",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "={{ $('CRM operation').first().json.data.channel }}",
+            "sender_id": "={{ $('CRM operation').first().json.data.sender_id }}"
+          },
+          "matchingColumns": [
+            "channel",
+            "sender_id"
+          ],
+          "schema": [
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sender_id",
+              "displayName": "sender_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
     }
   ],
   "connections": {
@@ -2140,7 +2048,7 @@
       "main": [
         [
           {
-            "node": "Find conversation",
+            "node": "Conversation of client",
             "type": "main",
             "index": 0
           }
@@ -2148,46 +2056,6 @@
         [
           {
             "node": "Create task?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Find conversation": {
-      "main": [
-        [
-          {
-            "node": "Conversation exists",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Conversation exists": {
-      "main": [
-        [
-          {
-            "node": "Create message",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Create conversation",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create conversation": {
-      "main": [
-        [
-          {
-            "node": "Create message",
             "type": "main",
             "index": 0
           }
@@ -2301,46 +2169,6 @@
         [
           {
             "node": "Task parent given",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Find task conversation": {
-      "main": [
-        [
-          {
-            "node": "Task conversation exists",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Task conversation exists": {
-      "main": [
-        [
-          {
-            "node": "Create task",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Create task conversation",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create task conversation": {
-      "main": [
-        [
-          {
-            "node": "Create task",
             "type": "main",
             "index": 0
           }
@@ -2881,7 +2709,29 @@
         ],
         [
           {
-            "node": "Find task conversation",
+            "node": "Task conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation of client": {
+      "main": [
+        [
+          {
+            "node": "Create message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task conversation": {
+      "main": [
+        [
+          {
+            "node": "Create task",
             "type": "main",
             "index": 0
           }

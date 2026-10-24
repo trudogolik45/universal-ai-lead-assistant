@@ -4,7 +4,8 @@
         "senderId": "ID nadawcy",
         "contact": "Klient",
         "messages": "Wiadomości",
-        "leads": "Zgłoszenia"
+        "leads": "Zgłoszenia",
+        "lastMessageAt": "Ostatnia wiadomość"
     },
     "links": {
         "contact": "Klient",

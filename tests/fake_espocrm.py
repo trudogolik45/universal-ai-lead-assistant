@@ -1,4 +1,4 @@
-"""Фейк REST API EspoCRM в фейк-сервере: записи в памяти, CRUD, обязательные поля, поиск
+"""Фейк REST API EspoCRM в фейк-сервере: записи в памяти, CRUD, обязательные поля и уникальность, поиск
 (`equals`, `notEquals`, `in`, `isTrue`, `lessThan`, `greaterThan`, `greaterThanOrEquals`, `linkedWith`), связи.
 
 Подключён к фейк-серверу фикстурой `fake_server` (префикс /espocrm, env n8n ESPOCRM_BASE_URL).
@@ -31,6 +31,11 @@ REQUIRED = {
     "Vehicle": ("name",),
     "Contact": ("lastName",),
     "Lead": ("lastName",),
+}
+
+# Уникальные индексы (entityDefs модуля Uala): на вторую такую запись настоящая EspoCRM отвечает 500.
+UNIQUE = {
+    "Conversation": ("channel", "senderId"),
 }
 
 # Телефон настоящая EspoCRM принимает только в международном формате (+48600123456), иначе 400.
@@ -135,7 +140,16 @@ class FakeEspoCrm:
     def _create(self, entity: str, data: dict) -> Response:
         if any(data.get(field) in (None, "") for field in REQUIRED.get(entity, ())) or not valid(data):
             return Response(400, None)
+        if self._duplicate(entity, data):
+            return Response(500, None)
         return Response(200, self._store(entity, data))
+
+    def _duplicate(self, entity: str, data: dict) -> bool:
+        fields = UNIQUE.get(entity)
+        if not fields:
+            return False
+        key = tuple(data.get(f) for f in fields)
+        return any(tuple(r.get(f) for f in fields) == key for r in self._records.get(entity, {}).values())
 
     def _store(self, entity: str, data: dict) -> dict:
         # createdAt из data — запись, заведённая «в прошлом» (crm.add); n8n его не шлёт.

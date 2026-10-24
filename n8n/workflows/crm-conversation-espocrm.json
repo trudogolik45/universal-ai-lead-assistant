@@ -1,0 +1,256 @@
+{
+  "id": "uala0crmConversn",
+  "name": "CRM adapter (EspoCRM): conversation of client",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "5b30f0cd-9c5c-4be4-839f-f7b38d339917",
+      "name": "Client in channel",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "channel",
+              "type": "string"
+            },
+            {
+              "name": "sender_id",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f5b7a513-c2e0-4070-ad53-660b0e0f22c1",
+      "name": "Find conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Conversation",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'equals', attribute: 'channel', value: $('Client in channel').first().json.channel }, { type: 'equals', attribute: 'senderId', value: $('Client in channel').first().json.sender_id } ], select: ['id'], maxSize: 1 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "id": "2fe51aa2-7d0b-4281-9073-a13b8d38e52a",
+      "name": "Conversation exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "b8bd1bfa",
+              "leftValue": "={{ $json.total > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6f2606df-184c-4672-aad6-881a2f4ddf1e",
+      "name": "Create conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Conversation",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('Client in channel').first().json.channel + ' · ' + $('Client in channel').first().json.sender_id, channel: $('Client in channel').first().json.channel, senderId: $('Client in channel').first().json.sender_id }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "c718ac50-45ee-4ecc-a5b1-3e3b669e64e5",
+      "name": "Find conversation created in parallel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        500
+      ],
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Conversation",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'equals', attribute: 'channel', value: $('Client in channel').first().json.channel }, { type: 'equals', attribute: 'senderId', value: $('Client in channel').first().json.sender_id } ], select: ['id'], maxSize: 1 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "id": "555410ac-2635-46d4-a822-fa95b7242307",
+      "name": "Conversation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Найденная, созданная или созданная параллельным вызовом Беседа. Нет ни одной — CRM отвергла создание\n// по другой причине: ошибка, вызывающий повторит позже.\nconst id = $json.list ? $json.list[0]?.id : $json.id;\nif (!id) throw new Error('Беседа Клиента не создалась и не нашлась в CRM');\nreturn { json: { id } };"
+      }
+    }
+  ],
+  "connections": {
+    "Client in channel": {
+      "main": [
+        [
+          {
+            "node": "Find conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find conversation": {
+      "main": [
+        [
+          {
+            "node": "Conversation exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation exists": {
+      "main": [
+        [
+          {
+            "node": "Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create conversation": {
+      "main": [
+        [
+          {
+            "node": "Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find conversation created in parallel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find conversation created in parallel": {
+      "main": [
+        [
+          {
+            "node": "Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

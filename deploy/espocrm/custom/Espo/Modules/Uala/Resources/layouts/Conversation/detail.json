@@ -20,6 +20,12 @@
             ],
             [
                 {
+                    "name": "lastMessageAt"
+                },
+                false
+            ],
+            [
+                {
                     "name": "description",
                     "fullWidth": true
                 }

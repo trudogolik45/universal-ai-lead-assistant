@@ -4,7 +4,8 @@
         "senderId": "Sender ID",
         "contact": "Client",
         "messages": "Messages",
-        "leads": "Leads"
+        "leads": "Leads",
+        "lastMessageAt": "Last message"
     },
     "links": {
         "contact": "Client",

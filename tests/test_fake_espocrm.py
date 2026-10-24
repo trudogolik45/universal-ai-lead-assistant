@@ -215,3 +215,12 @@ def test_slow_entity_answers_late_while_others_answer_at_once(api, crm):
         fast = time.monotonic() - started
 
     assert slow >= 1 > fast
+
+
+def test_second_conversation_of_same_client_in_channel_is_refused(api, crm):
+    api.post("Conversation", json=conversation("messenger", "psid-9"))
+
+    refused = api.post("Conversation", json=conversation("messenger", "psid-9"))
+
+    assert refused.status_code == 500
+    assert len(crm.records("Conversation")) == 1
