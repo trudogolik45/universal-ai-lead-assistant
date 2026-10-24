@@ -130,6 +130,7 @@ services:
       ESPOCRM_CONFIG_UALA_N8N_HOOK_SECRET: test-n8n-hook-secret
       # Повтор вызова n8n: в проде пауза 60 с × номер попытки, в стенде — секунда.
       ESPOCRM_CONFIG_UALA_N8N_RETRY_DELAY: "1"
+      ESPOCRM_CONFIG_UALA_COMPANY: autopro-service
     volumes:
       - /var/www/html/data
     extra_hosts:
@@ -144,6 +145,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
 
   espocrm-daemon:
     <<: *espocrm

@@ -1,5 +1,5 @@
 """API-пользователь n8n в EspoCRM: роль с правами и пользователь с API-ключом; группы сотрудников с ролью;
-валюта — злотый (суммы Смет).
+валюта — злотый (суммы Смет); почта CRM — письма сотрудникам о назначенной Задаче человеку.
 
 Идемпотентно: роли, пользователь и команды ищутся по имени, права ролей перезаписываются
 из ROLE_ACL и STAFF_ACL.
@@ -7,7 +7,12 @@
 make espocrm-api-user на VPS сразу пишет его в ~/uala/.env (ESPOCRM_API_KEY).
 
   ESPOCRM_URL=... ESPOCRM_ADMIN_PASSWORD=... uv run python -m scripts.espocrm_bootstrap
+
+Почта — тот же ящик, что у отчётов владельцу (SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASSWORD,
+SMTP_FROM); без SMTP_HOST EspoCRM писем не шлёт, остаются уведомления в CRM.
 """
+
+import os
 
 from scripts.espocrm import EspoCrm, admin_from_env
 
@@ -54,11 +59,45 @@ STAFF_ACL = {
 CURRENCY_SETTINGS = {"currencyList": ["PLN"], "defaultCurrency": "PLN", "baseCurrency": "PLN"}
 
 
-def bootstrap(admin: EspoCrm) -> str:
-    """Валюта, группы сотрудников и API-пользователь n8n; возвращает его API-ключ."""
+def bootstrap(admin: EspoCrm, smtp: dict | None = None) -> str:
+    """Валюта, группы сотрудников, почта CRM (smtp — см. smtp_from_env) и API-пользователь n8n;
+    возвращает его API-ключ."""
     admin.request("PUT", "Settings", json=CURRENCY_SETTINGS)
     ensure_teams(admin)
+    ensure_mail(admin, smtp)
     return ensure_api_user(admin)
+
+
+def smtp_from_env(env=os.environ) -> dict | None:
+    """SMTP ящика Заказчика из env, как у credentials SMTP n8n: SMTP_SECURE=true — TLS сразу, иначе STARTTLS."""
+    if not env.get("SMTP_HOST"):
+        return None
+    secure = env.get("SMTP_SECURE") == "true"
+    return {
+        "emailAddress": env["SMTP_FROM"],
+        "smtpHost": env["SMTP_HOST"],
+        "smtpPort": int(env.get("SMTP_PORT") or (465 if secure else 587)),
+        "smtpSecurity": "SSL" if secure else "TLS",
+        "smtpAuth": bool(env.get("SMTP_USER")),
+        "smtpUsername": env.get("SMTP_USER") or None,
+        "smtpPassword": env.get("SMTP_PASSWORD") or None,
+    }
+
+
+def ensure_mail(admin: EspoCrm, smtp: dict | None) -> None:
+    """Письма о назначенной Задаче человеку: EspoCRM 10 шлёт системные письма с группового ящика
+    со своим SMTP, адрес которого — системный адрес отправителя. Ящик ищется по адресу."""
+    if not smtp:
+        return
+    account = {"name": "Uala", "status": "Active", "useImap": False, "useSmtp": True, **smtp}
+    account_id = find_id(admin, "InboundEmail", "emailAddress", smtp["emailAddress"])
+    if account_id:
+        admin.update("InboundEmail", account_id, account)
+    else:
+        admin.create("InboundEmail", account)
+    admin.request(
+        "PUT", "Settings", json={"outboundEmailFromAddress": smtp["emailAddress"], "assignmentEmailNotifications": True}
+    )
 
 
 def ensure_teams(admin: EspoCrm) -> None:
@@ -100,7 +139,7 @@ def find_id(admin: EspoCrm, entity: str, attribute: str, value: str) -> str | No
 
 
 def main() -> None:
-    print(bootstrap(admin_from_env()))
+    print(bootstrap(admin_from_env(), smtp_from_env()))
 
 
 if __name__ == "__main__":

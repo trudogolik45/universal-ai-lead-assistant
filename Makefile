@@ -43,7 +43,8 @@ env-init:
 		done'
 
 # API-пользователь n8n в EspoCRM (scripts/espocrm_bootstrap.py), его ключ — в ESPOCRM_API_KEY
-# в .env на VPS; n8n пересоздаётся, чтобы увидеть ключ. Ключ не покидает VPS. Повтор безопасен.
+# в .env на VPS; n8n пересоздаётся, чтобы увидеть ключ. Ключ не покидает VPS. Там же почта CRM
+# из SMTP_* .env (письма о Задаче человеку). Повтор безопасен.
 espocrm-api-user:
 	ssh $(VPS) 'mkdir -p $(VPS_DIR)/app'
 	rsync -az pyproject.toml uv.lock scripts $(VPS):$(VPS_DIR)/app/

@@ -48,6 +48,8 @@ class N8nWebhook
      */
     public function post(string $urlParam, array $payload, Entity $source): void
     {
+        $payload = $this->withCompany($payload);
+
         if ($this->send($urlParam, $payload)) {
             return;
         }
@@ -81,6 +83,21 @@ class N8nWebhook
         }
 
         $this->scheduleRetry([...$call, 'attempt' => $call['attempt'] + 1]);
+    }
+
+    /**
+     * У каждого Заказчика своя CRM (ADR 0001), а Клиент WhatsApp может писать нескольким Заказчикам:
+     * n8n ищет его Беседу только у Заказчика этой CRM — config ualaCompany (env ESPOCRM_CONFIG_UALA_COMPANY),
+     * slug Заказчика в буфере.
+     *
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function withCompany(array $payload): array
+    {
+        $company = $this->config->get('ualaCompany');
+
+        return $company ? [...$payload, 'company' => $company] : $payload;
     }
 
     /** @param array<string, mixed> $payload */

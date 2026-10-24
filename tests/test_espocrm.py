@@ -13,9 +13,12 @@ import uuid
 from scripts.espocrm import EspoCrm
 from scripts.espocrm_bootstrap import API_USER
 from tests.booking import WORKING_CALENDAR_NODE, WORKING_RANGES_NODE, adapter_query, busy_where
-from tests.espocrm import EMPLOYEE_REPLY_PATH, ESTIMATE_PATH, N8N_HOOK_SECRET, REPAIR_STATUS_PATH, TASK_DONE_PATH
+from tests.espocrm import (
+    COMPANY, EMPLOYEE_REPLY_PATH, ESTIMATE_PATH, N8N_HOOK_SECRET, REPAIR_STATUS_PATH, TASK_DONE_PATH,
+)
 from tests.fake_server import Response
 from tests.knowledge import assistant_knowledge_query
+from tests.mailpit import Mailpit
 from tests.marketing import consented_where, conversations_of_where
 from tests.owner_report import report_where
 from tests.polling import eventually, stays
@@ -37,10 +40,12 @@ def create_conversation(espocrm, sender_id: str, channel: str = "messenger") -> 
 def employee(espocrm, team_name: str, open_tasks: int = 0) -> dict:
     """Сотрудник Заказчика в команде (группе): его заводит администратор CRM."""
     team = espocrm.admin.find("Team", [{"type": "equals", "attribute": "name", "value": team_name}])[0]
+    user_name = f"{team_name.lower()}-{uuid.uuid4().hex[:6]}"
     user = espocrm.admin.create(
         "User",
         {
-            "userName": f"{team_name.lower()}-{uuid.uuid4().hex[:6]}",
+            "userName": user_name,
+            "emailAddress": f"{user_name}@autopro.test",
             "lastName": "Kowalska",
             "type": "regular",
             "isActive": True,
@@ -95,6 +100,11 @@ def test_api_user_writes_conversation_and_messages_in_sent_order(espocrm):
         ("in", "client", "Ile kosztuje wymiana oleju?"),
         ("out", "assistant", "Wymiana oleju — 150 zł."),
     ]
+    # Сохранение Беседы EspoCRM публикует по WebSocket: открытый экран Беседы показывает новое Сообщение.
+    assert espocrm.api.read("Conversation", wanted["id"])["lastMessageAt"] == "2026-10-23 10:00:07"
+    # Одна Беседа на Клиента в Канале: вторую, созданную параллельным вызовом, CRM отвергает.
+    duplicate = {"name": "messenger · psid-200", "channel": "messenger", "senderId": "psid-200"}
+    assert espocrm.api.http.post("Conversation", json=duplicate).status_code == 500
 
 
 def test_api_user_writes_client_lead_vehicle_and_appointment(espocrm):
@@ -185,7 +195,7 @@ def test_api_user_finds_meetings_and_clients_as_crm_adapter_does(espocrm):
     assert ("whatsapp", "48600333001") in {(a["channel"], a["senderId"]) for a in addresses}
 
 
-def test_handoff_task_goes_to_team_member_and_notifies_them(espocrm):
+def test_handoff_task_goes_to_team_member_and_notifies_them(espocrm, stand):
     conversation = create_conversation(espocrm, "psid-240")
     busy = employee(espocrm, "Administratorzy", open_tasks=2)
     team_id = busy["teamsIds"][0]
@@ -210,6 +220,10 @@ def test_handoff_task_goes_to_team_member_and_notifies_them(espocrm):
     assert busy["id"] in members and open_tasks["total"] == 2
     assert [t["id"] for t in espocrm.api.related("Conversation", conversation["id"], "tasks")] == [task["id"]]
     assert eventually(lambda: task["id"] in [n["relatedParentId"] for n in notifications(logged_in(espocrm, busy))])
+    # И письмо: EspoCRM шлёт его заданием раз в 2 минуты через SMTP Заказчика (в стенде — Mailpit).
+    mailpit = Mailpit(stand.mailpit_url())
+    assert eventually(lambda: [m for m in mailpit.messages() if f"{busy['userName']}@autopro.test" in m.to],
+                      timeout=240)
 
 
 def employee_replies(fake) -> list:
@@ -233,6 +247,7 @@ def test_employee_message_calls_n8n_and_messages_of_n8n_do_not(espocrm, fake):
         "channel": "messenger",
         "sender_id": "psid-400",
         "text": "Auto gotowe do odbioru.",
+        "company": COMPANY,
     }
     saved = espocrm.admin.read("Message", message["id"])
     assert (saved["direction"], saved["author"], bool(saved["sentAt"])) == ("out", "employee", True)
@@ -274,7 +289,9 @@ def test_closed_task_and_new_repair_and_estimate_status_call_n8n(espocrm, fake):
     as_mechanic.update("RepairOrder", order["id"], {"status": "Waiting for Parts"})
     as_mechanic.update("Estimate", estimate["id"], {"status": "Ready"})
 
-    assert eventually(lambda: calls(fake, TASK_DONE_PATH, "crm_task_id", task["id"])) == [{"crm_task_id": task["id"]}]
+    assert eventually(lambda: calls(fake, TASK_DONE_PATH, "crm_task_id", task["id"])) == [
+        {"crm_task_id": task["id"], "company": COMPANY}
+    ]
     [status] = eventually(lambda: calls(fake, REPAIR_STATUS_PATH, "crm_repair_order_id", order["id"]))
     assert (status["status"], status["name"]) == ("Waiting for Parts", "Skoda Octavia: sprzęgło")
     assert sorted(status["conversations"], key=lambda c: c["channel"]) == conversations

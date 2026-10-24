@@ -16,6 +16,8 @@ REPAIR_STATUS_PATH = "/n8n/webhook/repair-status"
 ESTIMATE_PATH = "/n8n/webhook/estimate"
 # Секрет вебхуков хуков из docker-compose.test.yml: его же ждёт n8n.
 N8N_HOOK_SECRET = "test-n8n-hook-secret"
+# Заказчик этой CRM (ESPOCRM_CONFIG_UALA_COMPANY стенда): хуки шлют его slug n8n.
+COMPANY = "autopro-service"
 
 
 @dataclass
