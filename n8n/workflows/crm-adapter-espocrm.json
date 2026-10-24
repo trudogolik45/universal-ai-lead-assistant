@@ -284,7 +284,7 @@
         600
       ],
       "parameters": {
-        "jsCode": "// Задача человеку: вид → группа (команда EspoCRM). Команды заводит scripts/espocrm_bootstrap.py,\n// сотрудников в них добавляет Заказчик в админке CRM.\nconst TEAM_BY_KIND = { handoff: 'Administratorzy' };\nconst kind = $('CRM operation').first().json.data.kind;\nif (!TEAM_BY_KIND[kind]) {\n  throw new Error(`Переходник CRM не знает вид Задачи человеку ${kind}`);\n}\nreturn [{ json: { team: TEAM_BY_KIND[kind] } }];"
+        "jsCode": "// Задача человеку: вид → группа (команда EspoCRM). Команды заводит scripts/espocrm_bootstrap.py,\n// сотрудников в них добавляет Заказчик в админке CRM.\nconst TEAM_BY_KIND = { handoff: 'Administratorzy', bad_rating: 'Administratorzy' };\nconst kind = $('CRM operation').first().json.data.kind;\nif (!TEAM_BY_KIND[kind]) {\n  throw new Error(`Переходник CRM не знает вид Задачи человеку ${kind}`);\n}\nreturn [{ json: { team: TEAM_BY_KIND[kind] } }];"
       }
     },
     {

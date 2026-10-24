@@ -1,7 +1,8 @@
 """Статус ремонта: мастер меняет статус Заказ-наряда в EspoCRM, хук модуля Uala зовёт webhook n8n
 (контракт — tests/test_espocrm.py), и Клиент узнаёт, что машину приняли, что ждём запчасти и что можно
 забирать. Клиент из WhatsApp получает шаблон WhatsApp, Клиент из Messenger и Instagram — SMS через SMSAPI
-(после 24 часов Meta не пускает туда Автоматизации). Остальные статусы внутренние.
+(после 24 часов Meta не пускает туда Автоматизации). Закрытие — запрос оценки (tests/test_repair_rating.py),
+остальные статусы внутренние.
 
 Главный шов: на входе — вебхук хука EspoCRM, на выходе — WhatsApp Cloud API и SMSAPI фейк-сервера.
 """
@@ -84,7 +85,7 @@ def test_repair_status_language_is_english_for_non_polish_client(db, fake, n8n_u
     assert sms["message"] == "AutoPro Service: your car is ready for collection."
 
 
-@pytest.mark.parametrize("status", ["New", "Diagnostics", "In Repair", "Closed"])
+@pytest.mark.parametrize("status", ["New", "Diagnostics", "In Repair"])
 def test_internal_repair_status_is_not_sent_to_client(db, fake, n8n_url, company, status):
     client = client_in(db, company, "whatsapp")
 

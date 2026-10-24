@@ -126,6 +126,22 @@ WhatsApp разрешает бизнесу писать свободным те�
 
 Дождитесь **Approved** у всех шести. Клиенты из Messenger и Instagram получают статус по SMS.
 
+## Шаг 9. Шаблон «оценка ремонта»
+
+Когда мастер закрывает Заказ-наряд, клиент оценивает ремонт одним нажатием.
+
+1. **Message templates** -> **Create template**, категория **Utility**, название ровно
+   `repair_rating_request`, без переменных.
+2. Язык **Polish**, текст (Body):
+   ```
+   Dziękujemy za wizytę! Jak oceniasz naprawę w skali od 1 do 5?
+   ```
+3. В **Buttons** добавьте пять кнопок **Quick reply** с текстами ровно `1`, `2`, `3`, `4`, `5`:
+   нажатие приходит текстом кнопки.
+4. Добавьте язык **English** (`en`): `Thank you for your visit! How would you rate the repair from 1 to 5?`
+   и те же пять кнопок.
+5. Дождитесь **Approved** у обоих языков. Клиенты из Messenger и Instagram получают просьбу по SMS.
+
 ## Проверка
 
 Напишите на номер сервиса в WhatsApp с личного телефона. Ассистент должен ответить. Ответа нет —
@@ -141,6 +157,7 @@ WhatsApp разрешает бизнесу писать свободным те�
 | «Шаблон `news_update` одобрен на pl и en» | Шаг 6 | — |
 | «Шаблон `appointment_reminder` одобрен на pl и en» | Шаг 7 | — |
 | «Шаблоны `repair_accepted`, `repair_waiting_for_parts`, `repair_ready` одобрены на pl и en» | Шаг 8 | — |
+| «Шаблон `repair_rating_request` с кнопками 1–5 одобрен на pl и en» | Шаг 9 | — |
 
 Токен даёт доступ к переписке вашего номера. Передавайте его так же, как токены Messenger
 (раздел «Что прислать разработчику» в [docs/meta-setup.md](meta-setup.md)): не в открытый чат и
