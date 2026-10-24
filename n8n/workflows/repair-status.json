@@ -44,7 +44,7 @@
           "conditions": [
             {
               "id": "c1",
-              "leftValue": "={{ !!$env.EMPLOYEE_REPLY_SECRET && $json.headers['x-uala-secret'] === $env.EMPLOYEE_REPLY_SECRET }}",
+              "leftValue": "={{ !!$env.N8N_HOOK_SECRET && $json.headers['x-uala-secret'] === $env.N8N_HOOK_SECRET }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",

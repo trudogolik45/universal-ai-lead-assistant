@@ -9,7 +9,7 @@ import uuid
 import httpx
 import pytest
 
-from tests.espocrm import EMPLOYEE_REPLY_SECRET
+from tests.espocrm import N8N_HOOK_SECRET
 from tests.factories import create_company
 from tests.meta import MetaClient, messenger_payload, new_mid, new_wamid, whatsapp_payload
 from tests.openrouter import assistant_reply, completion_requests, respond_with
@@ -40,7 +40,7 @@ def client(db, company):
     db.execute("select delete_client(%s, 'messenger', %s)", (company, sender_id))
 
 
-def employee_reply(n8n_url, sender_id, text, secret=EMPLOYEE_REPLY_SECRET, channel="messenger") -> httpx.Response:
+def employee_reply(n8n_url, sender_id, text, secret=N8N_HOOK_SECRET, channel="messenger") -> httpx.Response:
     """Вызов, который делает хук EspoCRM, когда сотрудник пишет в Беседе."""
     return httpx.post(
         f"{n8n_url}/webhook/employee-reply",

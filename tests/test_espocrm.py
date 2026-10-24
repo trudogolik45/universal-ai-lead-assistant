@@ -12,7 +12,7 @@ from scripts.espocrm import EspoCrm
 from scripts.espocrm_bootstrap import API_USER, ensure_api_user
 from scripts.espocrm_knowledge import DEMO_CALENDAR, seed_calendar, seed_knowledge
 from tests.booking import WORKING_CALENDAR_NODE, WORKING_RANGES_NODE, adapter_query, busy_where
-from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET, ESTIMATE_PATH, REPAIR_STATUS_PATH, TASK_DONE_PATH
+from tests.espocrm import EMPLOYEE_REPLY_PATH, N8N_HOOK_SECRET, ESTIMATE_PATH, REPAIR_STATUS_PATH, TASK_DONE_PATH
 from tests.knowledge import assistant_knowledge_query
 from tests.marketing import consented_where, conversations_of_where
 from tests.owner_report import report_where
@@ -567,7 +567,7 @@ def test_employee_message_in_conversation_calls_n8n_with_text_and_client_address
 
     [call] = eventually(lambda: employee_replies(fake))
     assert call.method == "POST"
-    assert call.headers["X-Uala-Secret"] == EMPLOYEE_REPLY_SECRET
+    assert call.headers["X-Uala-Secret"] == N8N_HOOK_SECRET
     assert call.json() == {
         "crm_message_id": message["id"],
         "channel": "messenger",
@@ -615,7 +615,7 @@ def test_employee_closing_conversation_task_calls_n8n_with_task_id(espocrm, fake
     as_employee.update("Task", task["id"], {"status": "Completed"})
 
     [call] = eventually(lambda: done_tasks(fake))
-    assert call.headers["X-Uala-Secret"] == EMPLOYEE_REPLY_SECRET
+    assert call.headers["X-Uala-Secret"] == N8N_HOOK_SECRET
     assert call.json() == {"crm_task_id": task["id"]}
 
 
@@ -695,7 +695,7 @@ def test_mechanic_changing_repair_status_calls_n8n_with_status_and_client_conver
         r for r in repair_statuses(fake)
         if r.json()["crm_repair_order_id"] == order["id"] and r.json()["status"] == "Waiting for Parts"
     ])
-    assert call.headers["X-Uala-Secret"] == EMPLOYEE_REPLY_SECRET
+    assert call.headers["X-Uala-Secret"] == N8N_HOOK_SECRET
     body = call.json()
     assert body["name"] == "Skoda Octavia: wymiana sprzęgła"
     assert sorted(body["conversations"], key=lambda c: c["channel"]) == conversations
@@ -768,7 +768,7 @@ def test_estimate_ready_calls_n8n_with_amount_and_client_conversations(espocrm, 
     as_mechanic.update("Estimate", estimate["id"], {"status": "Ready"})
 
     [call] = eventually(lambda: [r for r in estimate_calls(fake, estimate["id"]) if r.json()["status"] == "Ready"])
-    assert call.headers["X-Uala-Secret"] == EMPLOYEE_REPLY_SECRET
+    assert call.headers["X-Uala-Secret"] == N8N_HOOK_SECRET
     body = call.json()
     assert (body["crm_repair_order_id"], body["name"], body["amount"], body["currency"]) == (
         order["id"], "Wymiana sprzęgła", 1250.5, "PLN"

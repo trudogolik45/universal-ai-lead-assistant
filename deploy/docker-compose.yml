@@ -75,7 +75,7 @@ services:
       ESPOCRM_CONFIG_UALA_TASK_DONE_URL: http://n8n:5678/webhook/task-done
       ESPOCRM_CONFIG_UALA_REPAIR_STATUS_URL: http://n8n:5678/webhook/repair-status
       ESPOCRM_CONFIG_UALA_ESTIMATE_URL: http://n8n:5678/webhook/estimate
-      ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_SECRET: ${EMPLOYEE_REPLY_SECRET:?EMPLOYEE_REPLY_SECRET не задан}
+      ESPOCRM_CONFIG_UALA_N8N_HOOK_SECRET: ${N8N_HOOK_SECRET:?N8N_HOOK_SECRET не задан}
     ports:
       - "127.0.0.1:8080:80"
     volumes:

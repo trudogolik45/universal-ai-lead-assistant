@@ -7,7 +7,7 @@ use Espo\Core\Utils\Log;
 
 /**
  * Вызов webhook n8n из хуков модуля (ADR 0002): сразу, а не по расписанию, как встроенные
- * webhooks EspoCRM. Секрет — config ualaEmployeeReplySecret (env ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_SECRET),
+ * webhooks EspoCRM. Секрет — config ualaN8nHookSecret (env ESPOCRM_CONFIG_UALA_N8N_HOOK_SECRET),
  * n8n сверяет его с заголовком X-Uala-Secret.
  *
  * Таймаут короткий, ошибка только пишется в лог: сохранение записи не ломается и не ждёт n8n.
@@ -41,7 +41,7 @@ class N8nWebhook
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
-                'X-Uala-Secret: ' . $this->config->get('ualaEmployeeReplySecret', ''),
+                'X-Uala-Secret: ' . $this->config->get('ualaN8nHookSecret', ''),
             ],
             CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
             CURLOPT_CONNECTTIMEOUT_MS => self::CONNECT_TIMEOUT_MS,

@@ -2,7 +2,7 @@ VPS ?= n3-vps
 VPS_DIR ?= uala
 COMPOSE = docker compose -f deploy/docker-compose.yml
 # Секреты, которые env-init генерирует, если их нет в .env на VPS.
-GENERATED_SECRETS = N8N_ENCRYPTION_KEY ESPOCRM_DB_PASSWORD ESPOCRM_ADMIN_PASSWORD EMPLOYEE_REPLY_SECRET
+GENERATED_SECRETS = N8N_ENCRYPTION_KEY ESPOCRM_DB_PASSWORD ESPOCRM_ADMIN_PASSWORD N8N_HOOK_SECRET
 # Python-скрипты на VPS запускаются в этом контейнере: секреты из .env не покидают VPS.
 UV_IMAGE = ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
@@ -11,7 +11,7 @@ UV_IMAGE = ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 # Валидация прод-конфигов локально: compose и Caddyfile. Пароли в .env.example пустые,
 # а compose без них не стартует — для проверки подставляем заглушки.
 check:
-	ENV_FILE=../.env.example ESPOCRM_DB_PASSWORD=check ESPOCRM_ADMIN_PASSWORD=check EMPLOYEE_REPLY_SECRET=check \
+	ENV_FILE=../.env.example ESPOCRM_DB_PASSWORD=check ESPOCRM_ADMIN_PASSWORD=check N8N_HOOK_SECRET=check \
 		$(COMPOSE) --env-file .env.example config -q
 	docker run --rm -e N8N_DOMAIN=n8n.n3spark.io -e ESPOCRM_DOMAIN=crm.n3spark.io \
 		-v $(CURDIR)/deploy/Caddyfile:/etc/caddy/Caddyfile:ro \

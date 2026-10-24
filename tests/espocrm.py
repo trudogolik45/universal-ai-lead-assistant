@@ -15,7 +15,7 @@ REPAIR_STATUS_PATH = "/n8n/webhook/repair-status"
 # Куда хук EspoCRM шлёт смену статуса Сметы.
 ESTIMATE_PATH = "/n8n/webhook/estimate"
 # Секрет вебхуков хуков из docker-compose.test.yml: его же ждёт n8n.
-EMPLOYEE_REPLY_SECRET = "test-employee-reply-secret"
+N8N_HOOK_SECRET = "test-n8n-hook-secret"
 
 
 @dataclass
