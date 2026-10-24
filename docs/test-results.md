@@ -6,8 +6,8 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-23, ветка `spec-17-33-marketing-consent` (от `spec-17` после #29, #34), команда `uv run pytest`.
-- Результат: **227 passed, 3 failed** за 1241 с; три упавших (test_booking, test_assistant_reply) ждали ответ без вопроса о Согласии на рекламу — тесты поправлены, их файлы перепрогнаны: 28 passed.
+- Дата: 2026-10-24, ветка `spec-17-31-estimate` (от `spec-17` после #33), команда `uv run pytest`.
+- Результат: **274 passed, 3 failed** за 670 с: `test_migrate.py::test_every_client_data_table_is_scoped_by_company` не знал таблицу `estimates` — поправлен; два `test_owner_report.py` упали под нагрузкой хоста. Перепрогон `test_migrate.py` и `test_owner_report.py`: 12 passed.
 
 ## Сценарии спеки → тесты
 
