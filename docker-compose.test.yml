@@ -128,6 +128,8 @@ services:
       ESPOCRM_CONFIG_UALA_REPAIR_STATUS_URL: ${REPAIR_STATUS_URL:-http://n8n:5678/webhook/repair-status}
       ESPOCRM_CONFIG_UALA_ESTIMATE_URL: ${ESTIMATE_URL:-http://n8n:5678/webhook/estimate}
       ESPOCRM_CONFIG_UALA_N8N_HOOK_SECRET: test-n8n-hook-secret
+      # Повтор вызова n8n: в проде пауза 60 с × номер попытки, в стенде — секунда.
+      ESPOCRM_CONFIG_UALA_N8N_RETRY_DELAY: "1"
     volumes:
       - /var/www/html/data
     extra_hosts:

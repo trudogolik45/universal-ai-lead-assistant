@@ -33,6 +33,6 @@ class NotifyStatus implements AfterSave
             'name' => $entity->get('name'),
             'status' => $entity->get('status'),
             'conversations' => $this->clientConversations->of($entity->get('contactId')),
-        ]);
+        ], $entity);
     }
 }
