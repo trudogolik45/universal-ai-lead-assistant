@@ -47,7 +47,7 @@ env-init:
 # из SMTP_* .env (письма о Задаче человеку). Повтор безопасен.
 espocrm-api-user:
 	ssh $(VPS) 'mkdir -p $(VPS_DIR)/app'
-	rsync -az pyproject.toml uv.lock scripts $(VPS):$(VPS_DIR)/app/
+	rsync -az --exclude __pycache__ pyproject.toml uv.lock scripts $(VPS):$(VPS_DIR)/app/
 	ssh $(VPS) 'cd $(VPS_DIR) \
 		&& key=$$(docker run --rm --network uala_default --env-file .env -e ESPOCRM_URL=http://espocrm \
 			-v "$$PWD/app:/app" -w /app $(UV_IMAGE) uv run -q --no-dev python -m scripts.espocrm_bootstrap) \
@@ -59,7 +59,7 @@ espocrm-api-user:
 # Повтор безопасен: существующие записи и правки Заказчика не трогаются.
 espocrm-knowledge:
 	ssh $(VPS) 'mkdir -p $(VPS_DIR)/app'
-	rsync -az pyproject.toml uv.lock scripts $(VPS):$(VPS_DIR)/app/
+	rsync -az --exclude __pycache__ pyproject.toml uv.lock scripts $(VPS):$(VPS_DIR)/app/
 	ssh $(VPS) 'cd $(VPS_DIR) \
 		&& docker run --rm --network uala_default --env-file .env -e ESPOCRM_URL=http://espocrm \
 			-v "$$PWD/app:/app" -w /app $(UV_IMAGE) uv run -q --no-dev python -m scripts.espocrm_knowledge'
