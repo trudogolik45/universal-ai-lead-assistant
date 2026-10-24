@@ -91,21 +91,14 @@ def estimate_sent(db, fake, n8n_url, client, **kwargs) -> str:
     estimate_id = uuid.uuid4().hex[:17]
     change_estimate_status(n8n_url, "Ready", [address(client)], estimate_id=estimate_id, **kwargs)
     eventually(lambda: whatsapp_sent(fake))
-    eventually(lambda: step_done(db, estimate_id, "sent"))
     fake.reset()
     return estimate_id
 
 
-def step_done(db, estimate_id, step) -> bool:
-    return db.execute(
-        "select 1 from estimate_steps where crm_estimate_id = %s and step = %s and done_at is not null",
-        (estimate_id, step),
-    ).fetchone() is not None
-
-
-def run_and_settle(db, n8n_url, estimate_id, step):
+def run_until(n8n_url, done):
+    """Запуск цепочки и ожидание того, что шаг сделан: Клиенту ушло или задача создана."""
     assert run_estimates(n8n_url).status_code == 200
-    eventually(lambda: step_done(db, estimate_id, step))
+    eventually(done)
 
 
 # --- Задача «составить Смету» ---
@@ -217,7 +210,7 @@ def test_silent_client_gets_reminder_a_day_after_estimate(db, fake, n8n_url, com
     estimate_id = estimate_sent(db, fake, n8n_url, client)
     days_pass(db, estimate_id, 1)
 
-    run_and_settle(db, n8n_url, estimate_id, "reminder_1")
+    run_until(n8n_url, lambda: whatsapp_sent(fake))
 
     [message] = whatsapp_sent(fake)
     assert (message["to"], message["template"]) == (client["sender_id"], template("estimate_reminder"))
@@ -227,11 +220,11 @@ def test_silent_messenger_client_gets_reminder_by_sms(db, fake, n8n_url, company
     client = client_in(db, company, "messenger")
     estimate_id = uuid.uuid4().hex[:17]
     change_estimate_status(n8n_url, "Ready", [address(client)], estimate_id=estimate_id)
-    eventually(lambda: step_done(db, estimate_id, "sent"))
+    eventually(lambda: sms_sent(fake))
     fake.reset()
     days_pass(db, estimate_id, 1)
 
-    run_and_settle(db, n8n_url, estimate_id, "reminder_1")
+    run_until(n8n_url, lambda: sms_sent(fake))
 
     assert [sms["message"] for sms in sms_sent(fake)] == [REMINDER_PL]
 
@@ -244,11 +237,11 @@ def test_silent_client_gets_two_reminders_then_administrator_gets_task(db, fake,
     anna = employee(crm, "anna", administrators)
     employee(crm, "piotr", team(crm, MECHANICS))
 
-    for step in ("reminder_1", "reminder_2"):
+    for reminders in (1, 2):
         days_pass(db, estimate_id, 2)
-        run_and_settle(db, n8n_url, estimate_id, step)
+        run_until(n8n_url, lambda: len(whatsapp_sent(fake)) == reminders)
     days_pass(db, estimate_id, 2)
-    run_and_settle(db, n8n_url, estimate_id, "silent_task")
+    run_until(n8n_url, lambda: repair_order_tasks(crm, order_id))
 
     assert [m["template"]["name"] for m in whatsapp_sent(fake)] == ["estimate_reminder", "estimate_reminder"]
     [task] = repair_order_tasks(crm, order_id)
@@ -262,7 +255,7 @@ def test_second_reminder_waits_two_days_after_first(db, fake, n8n_url, company):
     client = client_in(db, company, "whatsapp")
     estimate_id = estimate_sent(db, fake, n8n_url, client)
     days_pass(db, estimate_id, 1)
-    run_and_settle(db, n8n_url, estimate_id, "reminder_1")
+    run_until(n8n_url, lambda: whatsapp_sent(fake))
     days_pass(db, estimate_id, 1)
 
     assert run_estimates(n8n_url).status_code == 200
@@ -275,9 +268,10 @@ def test_chain_is_over_after_silent_client_task(db, fake, crm, n8n_url, company)
     order_id = uuid.uuid4().hex[:17]
     estimate_id = estimate_sent(db, fake, n8n_url, client, order_id=order_id)
     employee(crm, "anna", team(crm, ADMINISTRATORS))
-    for step in ("reminder_1", "reminder_2", "silent_task"):
+    for done in (lambda: len(whatsapp_sent(fake)) == 1, lambda: len(whatsapp_sent(fake)) == 2,
+                 lambda: repair_order_tasks(crm, order_id)):
         days_pass(db, estimate_id, 2)
-        run_and_settle(db, n8n_url, estimate_id, step)
+        run_until(n8n_url, done)
     days_pass(db, estimate_id, 30)
 
     assert run_estimates(n8n_url).status_code == 200
@@ -317,10 +311,8 @@ def test_estimate_status_changed_by_employee_stops_chain(db, fake, n8n_url, comp
     client = client_in(db, company, "whatsapp")
     estimate_id = estimate_sent(db, fake, n8n_url, client)
 
-    change_estimate_status(n8n_url, status, [address(client)], estimate_id=estimate_id)
-    eventually(lambda: db.execute(
-        "select stopped_at from estimates where crm_estimate_id = %s", (estimate_id,)
-    ).fetchone()[0])
+    # n8n отвечает хуку CRM, записав смену статуса: дальше цепочка уже стоит.
+    assert change_estimate_status(n8n_url, status, [address(client)], estimate_id=estimate_id).status_code == 200
     days_pass(db, estimate_id, 1)
 
     assert run_estimates(n8n_url).status_code == 200
@@ -348,7 +340,7 @@ def test_unsent_estimate_is_sent_by_next_run(db, fake, n8n_url, company):
     db.execute("update leads set phone = %s where conversation_id = %s", (PHONE, client["conversation_id"]))
     db.execute("update estimate_steps set claimed_at = now() - interval '10 minutes'")
 
-    run_and_settle(db, n8n_url, estimate_id, "sent")
+    run_until(n8n_url, lambda: sms_sent(fake))
 
     assert [sms["message"] for sms in sms_sent(fake)] == [READY_PL]
 
