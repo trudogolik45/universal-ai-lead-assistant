@@ -4,7 +4,7 @@ import psycopg
 import pytest
 
 from scripts.migrate import migrate
-from tests.espocrm import EMPLOYEE_REPLY_PATH, REPAIR_STATUS_PATH, TASK_DONE_PATH
+from tests.espocrm import EMPLOYEE_REPLY_PATH, ESTIMATE_PATH, REPAIR_STATUS_PATH, TASK_DONE_PATH
 from tests.fake_espocrm import FakeEspoCrm
 from tests.fake_server import FakeServer
 from tests.mailpit import Mailpit
@@ -55,11 +55,12 @@ def truncate(conn, attempts: int = 3):
 def espocrm(stand, fake_server):
     """Настоящая EspoCRM стенда (tests/espocrm.py): своя база в Postgres стенда, свежая установка
     на прогон, модуль Uala и API-пользователь n8n, как в проде. Ответ сотрудника, закрытую
-    Задачу и статус Заказ-наряда хуки шлют в фейк-сервер, а не в n8n. Записи между тестами не чистятся: тест создаёт свои."""
+    Задачу, статус Заказ-наряда и Сметы хуки шлют в фейк-сервер, а не в n8n. Записи между тестами не чистятся: тест создаёт свои."""
     return stand.up_espocrm({
         "EMPLOYEE_REPLY_URL": fake_server.container_url(EMPLOYEE_REPLY_PATH),
         "TASK_DONE_URL": fake_server.container_url(TASK_DONE_PATH),
         "REPAIR_STATUS_URL": fake_server.container_url(REPAIR_STATUS_PATH),
+        "ESTIMATE_URL": fake_server.container_url(ESTIMATE_PATH),
     })
 
 

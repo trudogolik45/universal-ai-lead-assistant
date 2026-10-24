@@ -126,6 +126,19 @@ WhatsApp разрешает бизнесу писать свободным те�
 
 Дождитесь **Approved** у всех шести. Клиенты из Messenger и Instagram получают статус по SMS.
 
+## Шаг 9. Шаблоны «смета»
+
+Когда мастер отмечает смету готовой, клиент сразу получает её название и сумму, а если молчит —
+два напоминания. Создайте два шаблона, категория **Utility**, языки **Polish** и **English** (`en`),
+переменные: `{{1}}` — название сметы (пример `Wymiana sprzęgła`), `{{2}}` — сумма (пример `1250,50 PLN`):
+
+| Название | Polish | English |
+|---|---|---|
+| `estimate_ready` | Dzień dobry! Kosztorys naprawy „{{1}}” jest gotowy: {{2}}. Odpisz na tę wiadomość, czy go akceptujesz. | Hello! The repair estimate "{{1}}" is ready: {{2}}. Please reply to this message whether you accept it. |
+| `estimate_reminder` | Dzień dobry! Przypominamy o kosztorysie naprawy „{{1}}”: {{2}}. Odpisz na tę wiadomość, czy go akceptujesz. | Hello! A reminder about the repair estimate "{{1}}": {{2}}. Please reply to this message whether you accept it. |
+
+Дождитесь **Approved** у всех четырёх. Клиенты из Messenger и Instagram получают смету по SMS.
+
 ## Проверка
 
 Напишите на номер сервиса в WhatsApp с личного телефона. Ассистент должен ответить. Ответа нет —
@@ -141,6 +154,7 @@ WhatsApp разрешает бизнесу писать свободным те�
 | «Шаблон `news_update` одобрен на pl и en» | Шаг 6 | — |
 | «Шаблон `appointment_reminder` одобрен на pl и en» | Шаг 7 | — |
 | «Шаблоны `repair_accepted`, `repair_waiting_for_parts`, `repair_ready` одобрены на pl и en» | Шаг 8 | — |
+| «Шаблоны `estimate_ready`, `estimate_reminder` одобрены на pl и en» | Шаг 9 | — |
 
 Токен даёт доступ к переписке вашего номера. Передавайте его так же, как токены Messenger
 (раздел «Что прислать разработчику» в [docs/meta-setup.md](meta-setup.md)): не в открытый чат и

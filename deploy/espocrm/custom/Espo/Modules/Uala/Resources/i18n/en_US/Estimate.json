@@ -1,0 +1,24 @@
+{
+    "fields": {
+        "status": "Status",
+        "amount": "Amount",
+        "repairOrder": "Repair order"
+    },
+    "links": {
+        "repairOrder": "Repair order"
+    },
+    "options": {
+        "status": {
+            "Draft": "Draft",
+            "Ready": "Ready",
+            "Accepted": "Accepted",
+            "Rejected": "Rejected"
+        }
+    },
+    "tooltips": {
+        "status": "Ready — the estimate goes to the client by itself (WhatsApp or SMS); if the client stays silent, they get two reminders, then an administrator gets a task. Accepted, Rejected or Draft stop the reminders."
+    },
+    "labels": {
+        "Create Estimate": "Create Estimate"
+    }
+}

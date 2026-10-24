@@ -3,12 +3,15 @@
         "status": "Status",
         "contact": "Klient",
         "vehicle": "Pojazd",
-        "meeting": "Wizyta"
+        "meeting": "Wizyta",
+        "estimates": "Kosztorysy"
     },
     "links": {
         "contact": "Klient",
         "vehicle": "Pojazd",
-        "meeting": "Wizyta"
+        "meeting": "Wizyta",
+        "estimates": "Kosztorysy",
+        "tasks": "Zadania"
     },
     "options": {
         "status": {

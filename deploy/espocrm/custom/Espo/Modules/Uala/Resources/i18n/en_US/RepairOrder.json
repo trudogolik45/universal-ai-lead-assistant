@@ -3,12 +3,15 @@
         "status": "Status",
         "contact": "Client",
         "vehicle": "Vehicle",
-        "meeting": "Appointment"
+        "meeting": "Appointment",
+        "estimates": "Estimates"
     },
     "links": {
         "contact": "Client",
         "vehicle": "Vehicle",
-        "meeting": "Appointment"
+        "meeting": "Appointment",
+        "estimates": "Estimates",
+        "tasks": "Tasks"
     },
     "options": {
         "status": {
