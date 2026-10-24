@@ -1,8 +1,8 @@
 # Universal AI Lead Assistant
 
-AI-ассистент для входящих заявок малого бизнеса в Messenger: отвечает Клиенту по Базе знаний
-Заказчика, собирает Заявку и доставляет её в Google-таблицу, Telegram и CRM-webhook.
-Спека: issue #1, термины: `GLOSSARY.md`.
+AI-ассистент для входящих заявок малого бизнеса в Messenger, Instagram Direct и WhatsApp: отвечает Клиенту по Базе знаний
+Заказчика, собирает Заявку и ведёт Беседу, Клиента, Заявку и Задачи человеку в EspoCRM Заказчика.
+Спека: issue #17 (первая версия — #1), термины: `GLOSSARY.md`.
 
 ## Документы
 
@@ -11,9 +11,8 @@ AI-ассистент для входящих заявок малого бизн
 | `GLOSSARY.md` | Термины: Заказчик, Клиент, Ассистент, Беседа, Заявка, Режим ответа, Передача человеку |
 | [docs/deviations.md](docs/deviations.md) | Чем MVP отличается от ТЗ и почему |
 | [docs/knowledge-base.md](docs/knowledge-base.md) | Как менять Базу знаний, обязательные поля, Режим ответа, модель AI; удаление данных Клиента |
-| [docs/crm-webhook.md](docs/crm-webhook.md) | Подключение CRM через webhook, формат JSON, когда уходит |
 | [docs/meta-setup.md](docs/meta-setup.md) | Для Заказчика: приложение Meta, страница, вебхук, токены |
-| [docs/google-setup.md](docs/google-setup.md) | Для Заказчика: service account, JSON-ключ, доступ к таблице |
+| [docs/whatsapp-setup.md](docs/whatsapp-setup.md) | Для Заказчика: номер WhatsApp, постоянный токен, вебхук, шаблон «есть новости» |
 | [docs/test-results.md](docs/test-results.md) | Сценарии спеки → тесты → результат последнего прогона |
 
 ## Как устроено
@@ -22,12 +21,46 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 
 | Workflow | Вход | Что делает |
 |---|---|---|
-| `meta-webhook` | `POST /webhook/meta` | Подпись Meta → Заказчик по странице → Сообщение в Беседу → OpenRouter → ответ Клиенту, Заявка, Передача человеку |
-| `deliver-lead` | вызов из других workflow | Заявка в Google-таблицу, затем в CRM-webhook |
-| `notify-lead` | вызов из других workflow | Уведомление о Заявке или Передаче человеку в группу Telegram |
-| `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram |
-| `telegram-callback` | `POST /webhook/telegram` | Кнопки «Вернуть ассистенту» и «Закрыть»; возврат с полной Заявкой доставляет и объявляет её |
-| `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Дозапись недоставленных Заявок и алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
+| `meta-webhook` | `POST /webhook/meta` | Подпись Meta → сообщения в буфер входящих (`inbox`, дубль по id сообщения отсекается) → 200 Meta → `process-inbox` |
+| `process-inbox` | вызов из других workflow | Сообщение из буфера через `handle-message`; дошло до конца — помечается обработанным, упало — остаётся в буфере; третья неудача подряд — алерт «AI не отвечает» разработчикам, один раз на сообщение |
+| `handle-message` | вызов из других workflow | Заказчик по странице или номеру → Сообщение в Беседу → База знаний и свободные слоты из EspoCRM → OpenRouter → Запись в слот через `book-appointment` → ответ Клиенту через `send-to-client`, Заявка, Передача человеку; цифра 1–5 в ответ на запрос оценки ремонта — без AI: за 4–5 ссылка на отзыв в Google, за 1–3 Задача человеку через `create-rating-task`; входящее и ответ — в CRM через `write-message-to-crm`, Заявка — через `write-lead-to-crm`, Задача человеку — через `create-handoff-task` |
+| `send-to-client` | вызов из других workflow | Текст Клиенту в Канал его Беседы: Send API Messenger Platform (Messenger, Instagram Direct) или WhatsApp Cloud API; вне окна 24 часов после сообщения Клиента Messenger и Instagram — с меткой `HUMAN_AGENT`, WhatsApp — шаблон `news_update`. Автоматизация (на входе `template`): WhatsApp — этим шаблоном с параметрами, Клиенту из Messenger и Instagram — SMS через SMSAPI на телефон Заявки; ушедшая Автоматизация ложится в Беседу (и в CRM) исходящим Сообщением. `retry: true` — сначала в очередь отправки (`outbox`): не ушло — `retry-leads` повторит |
+| `appointment-reminders` | раз в 5 минут; `POST /webhook/reminders` | Напоминания о Записи за 24 и за 2 часа: запланированные Записи (`Meeting` Planned) из CRM через переходник → один раз на срок (`appointment_reminders`) → `send-to-client` с шаблоном `appointment_reminder` |
+| `marketing-reminders` | каждый день в 10:00; `POST /webhook/marketing` | Напоминания о ТО (через 11 месяцев после последней Записи) и о сезонной замене шин (весной и осенью) только Клиентам с Согласием на рекламу в CRM: Клиенты через переходник → одно на Клиента и повод (`marketing_messages`) → `send-to-client` с шаблоном |
+| `write-message-to-crm` | вызов из других workflow | Сообщение из Postgres в Беседу Клиента в CRM через переходник; не вышло — остаётся недописанным (`messages.crm_message_id` пуст) для retry |
+| `write-lead-to-crm` | вызов из других workflow | Заявка из Postgres в CRM с Клиентом и Автомобилем через переходник; не вышло или Заявка изменилась во время записи — её дописывает retry (`crm_leads`) |
+| `employee-reply` | `POST /webhook/employee-reply` | Ответ сотрудника из EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа переходит в режим человека, Ассистент в ней молчит, текст — Клиенту через `send-to-client` |
+| `repair-status` | `POST /webhook/repair-status` | Мастер сменил статус Заказ-наряда в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): на «Przyjęty do serwisu», «Czeka na części», «Gotowy do odbioru» Клиенту уходит сообщение через `send-to-client` — шаблон WhatsApp или SMS; на «Zamknięte» — один раз запрос оценки ремонта 1–5 (`repair_ratings`); остальные статусы внутренние. «Przyjęty do serwisu» — ещё Задача человеку «составить Смету» мастерам, одна на Заказ-наряд (`estimate_tasks`) |
+| `estimates` | `POST /webhook/estimate`; в рабочие часы раз в час; `POST /webhook/estimates` | Сотрудник сменил статус Сметы в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): «Gotowy» — Смета уходит Клиенту через `send-to-client` (шаблон `estimate_ready` или SMS), молчит — два уточнения (`estimate_reminder`) через сутки и ещё через двое, ещё через двое — Задача человеку «Klient milczy» администраторам; другой статус или ответ Клиента — цепочка стоит (`estimates`, `estimate_steps`) |
+| `task-done` | `POST /webhook/task-done` | Сотрудник закрыл Задачу «Передача человеку» в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа снова у Ассистента, Заявка `collecting` или `qualified` по обязательным полям |
+| `create-rating-task` | вызов из других workflow | Оценка ремонта 1–3 → Задача человеку «разобраться» администраторам через переходник: оценка, Канал, телефон, Заказ-наряд; не вышло — остаётся без задачи (`repair_ratings.crm_task_id` пуст) для retry |
+| `create-handoff-task` | вызов из других workflow | Передача человеку → Задача человеку в CRM через переходник: сводка на польском, ссылка на Беседу; не вышло — остаётся без задачи (`leads.handoff_task_id` пуст) для retry |
+| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операции: `record_message` — найти или создать Беседу по Каналу и id Клиента (`crm-conversation-espocrm`: один путь создания, вторую Беседу параллельного вызова CRM отвергает уникальным индексом — берётся первая), добавить Сообщение; `create_task` — Задача человеку (Task) к Беседе или к записи `parent_type`/`parent_id` (Заказ-наряд): вид → команда (`handoff`, `bad_rating`, `estimate_silent` → `Administratorzy`, `estimate` → `Mechanicy`), в команде — активный сотрудник с наименьшим числом открытых задач; `record_lead` — Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить, Запись Заявки — привязать к ним; `free_slots` — свободные слоты по рабочему календарю (`WorkingTimeCalendar`) и Записям (`Meeting`); `book_appointment` — Запись (`Meeting`) в слот, если он ещё свободен; `planned_appointments` — запланированные Записи с началом в ближайшие `hours` часов; `report` — сколько Заявок и Записей создано за период, всего и по Каналам; `consented_clients` — Канал и id Клиента в нём для каждой Беседы Клиентов с Согласием на рекламу |
+| `book-appointment` | вызов из других workflow | Запись Клиента в выбранный Ассистентом слот: блокировка слота в Postgres (`slot_locks`) → Запись в CRM через переходник → `appointments`; слот занят — Записи нет |
+| `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram разработчиков (`ALERT_TELEGRAM_CHAT_ID`); Заказчик его не видит |
+| `owner-report` | каждый день и каждый понедельник в 7:00; `POST /webhook/owner-report` | Отчёт владельцу письмом на польском: Заявки, Записи и конверсия по каждому Каналу за вчера или прошлую неделю, цифры из CRM через переходник |
+| `retry-leads` | раз в 5 минут; `POST /webhook/retry` | Повтор необработанных сообщений буфера и неотправленного из очереди отправки, дозапись Сообщений, Заявок и Задач человеку в CRM, недошедших алертов «AI не отвечает», закрытие Бесед после 7 дней тишины |
+
+Рядом работает EspoCRM на своём Postgres (`deploy/espocrm`, ADR 0001 и 0002). В её модуле Uala
+есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`), Автомобиль (`Vehicle`),
+Заказ-наряд (`RepairOrder`, «Zlecenie naprawy»), Смета (`Estimate`, «Kosztorys») и База знаний (`KnowledgeItem`) — её Ассистент читает на каждое Сообщение. Запись — встроенная
+встреча `Meeting` со связью с Автомобилем; свободные слоты — по встроенному рабочему календарю
+(`WorkingTimeCalendar`), см. docs/knowledge-base.md.
+Заявка — встроенный `Lead` (по-польски «Zgłoszenie») со своими полями услуга (`service`), удобное время
+(`desiredTime`) и связями с Клиентом, Автомобилем и Беседой; текст Заявки Ассистент пишет по-польски.
+У Клиента (`Contact`) есть поле Согласие на рекламу (`marketingConsent`): ответ Клиента в нём ставит
+n8n, сотрудник может поменять его руками. n8n ходит в EspoCRM по
+REST API под API-пользователем `n8n`, только через переходник `crm-adapter-espocrm`. Сообщения
+в Беседе упорядочены по времени отправки (`Message.sentAt`), а не записи: дописанное retry встаёт
+на своё место. Сообщение, которое сотрудник пишет в Беседе, хуки модуля Uala помечают исходящим
+от сотрудника и сразу (таймаут 2 с) отправляют в n8n (`employee-reply`); встроенные webhooks
+EspoCRM не используются — они уходят по расписанию. Так же сразу хук зовёт n8n (`task-done`), когда
+сотрудник закрывает Задачу к Беседе (статус «Completed» или «Canceled»): если это Задача
+«Передача человеку», Беседа возвращается Ассистенту. Беседа, в которую сотрудник написал сам
+без Передачи человеку, остаётся у человека до закрытия после 7 дней тишины. n8n не ответил 2xx —
+хук повторяет вызов заданием daemon EspoCRM 5 раз с паузой `ualaN8nRetryDelay` (60 с) × номер попытки;
+все не прошли — сотрудник, сохранивший запись, получает уведомление в CRM. Хуки шлют n8n slug своего
+Заказчика (`ESPOCRM_COMPANY_SLUG` в `.env`): n8n ищет Беседу Клиента только у него.
 
 Секреты — только в `.env` на VPS и в credentials n8n; в репо их нет. Имена и назначение всех
 переменных — `.env.example`.
@@ -43,39 +76,45 @@ uv run pytest
 Фикстуры (`tests/conftest.py`, `tests/stand.py`) сами поднимают стенд `docker-compose.test.yml`
 (Postgres вместо Supabase и n8n той же версии, что в проде), применяют миграции, заливают
 credentials и все workflow той же командой, что и прод (`scripts/n8n_sync.py`), и после прогона
-удаляют контейнеры. Внешние API (OpenRouter, Meta Graph, Telegram, Google Sheets, CRM) изображает
+удаляют контейнеры. Внешние API (OpenRouter, Meta Graph, Telegram, EspoCRM) изображает
 фейк-сервер `tests/fake_server.py` на хосте, n8n ходит в него через `host.docker.internal`.
-Без Docker тесты пропускаются.
+EspoCRM на главном шве — фейк с состоянием `tests/fake_espocrm.py` (фикстура `crm`: записи, которые
+сделал n8n; `crm.unavailable()` — CRM лежит). Настоящая EspoCRM — только в контрактных тестах
+`tests/test_espocrm.py`. Без Docker тесты пропускаются.
 
 - `STAND_KEEP=1 uv run pytest` — оставить стенд после прогона (логи: `docker compose -p <проект>
   -f docker-compose.test.yml logs n8n`, порт n8n: `... port n8n 5678`).
 - Имя compose-проекта — `COMPOSE_PROJECT_NAME`, по умолчанию своё на каждый checkout;
   порты хоста случайные, поэтому параллельные стенды не пересекаются.
-- Настоящая Google-таблица (`tests/test_lead_delivery_google.py`): задать
-  `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` и
-  `GOOGLE_SHEETS_TEST_SPREADSHEET_ID` (таблица расшарена на service account как Editor). Тест
-  поднимает второй стенд, пишет Заявку на свой временный лист, читает её обратно и удаляет лист.
-  Без этих переменных тест пропускается.
+- Настоящая EspoCRM (`tests/test_espocrm.py`, фикстура `espocrm`): образ из `deploy/espocrm`,
+  отдельная база `espocrm` в Postgres стенда, установка с нуля на каждый прогон (около полутора
+  минут), API-пользователь `n8n` — тем же `scripts/espocrm_bootstrap.py`, что в проде. Админка
+  стенда — `docker compose -p <проект> -f docker-compose.test.yml port espocrm 80`, вход
+  `admin` / `test-espocrm-admin`.
 
 Какие сценарии покрыты и результат последнего прогона — [docs/test-results.md](docs/test-results.md).
 
 ## Деплой
 
-n8n работает на VPS `n3-vps` в Docker за Caddy: `https://n8n.n3spark.io`.
+n8n и EspoCRM работают на VPS `n3-vps` в Docker за Caddy: `https://n8n.n3spark.io` и
+`https://crm.n3spark.io`.
 
 ```
-интернет :443 → traefik (k3s, TLS passthrough по SNI) → Caddy :8443 (TLS, Let's Encrypt) → n8n 127.0.0.1:5678
+интернет :443 → traefik (k3s, TLS passthrough по SNI) → Caddy :8443 (TLS, Let's Encrypt)
+  → n8n 127.0.0.1:5678
+  → EspoCRM 127.0.0.1:8080, её WebSocket /ws → 127.0.0.1:8081
 ```
 
 Публичные 80/443 на VPS держит traefik из k3s, он обслуживает остальные `*.n3spark.io`.
-Для `n8n.n3spark.io` он не расшифровывает TLS, а передаёт поток Caddy
-(`deploy/traefik-passthrough.yaml`). Caddy получает сертификат через TLS-ALPN-01.
-HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закрыт ufw, n8n слушает только loopback.
+Для `n8n.n3spark.io` и `crm.n3spark.io` он не расшифровывает TLS, а передаёт поток Caddy
+(`deploy/traefik-passthrough.yaml`). Caddy получает сертификаты через TLS-ALPN-01.
+HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закрыт ufw, n8n и EspoCRM слушают только loopback.
 
 Что нужно на ноутбуке: ssh-хост `n3-vps` в `~/.ssh/config`, `rsync`, `uv`, Docker (для `make check`).
 
-1. Однократно создать `.env` на VPS (`~/uala/.env`) из `.env.example` со сгенерированным
-   `N8N_ENCRYPTION_KEY`. Существующий файл команда не перезапишет:
+1. Создать `.env` на VPS (`~/uala/.env`) из `.env.example` и сгенерировать
+   `N8N_ENCRYPTION_KEY`, `ESPOCRM_DB_PASSWORD`, `ESPOCRM_ADMIN_PASSWORD`. Команда дописывает
+   только недостающие ключи, заданные значения не трогает, так что её можно повторять:
    ```
    make env-init
    ```
@@ -85,16 +124,31 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
    ```
    make deploy
    ```
-   Команда валидирует конфиги (`make check`), копирует `deploy/` на VPS, применяет
-   маршрут traefik и делает `docker compose pull && up -d`. `.env` на VPS не трогает.
+   Команда валидирует конфиги (`make check`), копирует `deploy/` на VPS и применяет маршрут
+   traefik. Потом она собирает образ EspoCRM и делает `docker compose up -d --wait`, а затем
+   `bin/command rebuild` в EspoCRM. `.env` на VPS не трогает.
 4. Открыть `https://n8n.n3spark.io` и при первом входе создать владельца n8n.
 5. Схема и демо-профили в Supabase (идемпотентно, повтор безопасен):
    ```
    DATABASE_URL=... uv run python -m scripts.migrate
-   DATABASE_URL=... DEMO_MESSENGER_PAGE_ID=... TELEGRAM_CHAT_ID=... GOOGLE_SHEETS_SPREADSHEET_ID=... \
+   DATABASE_URL=... DEMO_MESSENGER_PAGE_ID=... DEMO_WHATSAPP_PHONE_NUMBER_ID=... DEMO_INSTAGRAM_ACCOUNT_ID=... \
      uv run python -m scripts.seed
    ```
-6. Залить workflow:
+6. API-пользователь n8n в EspoCRM (повтор безопасен, ключ тот же):
+   ```
+   make espocrm-api-user
+   ```
+   Скрипт `scripts/espocrm_bootstrap.py` работает на VPS в контейнере uv. Под admin он создаёт
+   роль и API-пользователя `n8n`, пишет его ключ в `ESPOCRM_API_KEY` в `~/uala/.env` и
+   пересоздаёт n8n. Ключ не покидает VPS. Ещё он заводит группы сотрудников — команды
+   `Administratorzy` и `Mechanicy` с ролью `Pracownicy`. Сотрудников в них добавляет Заказчик
+   (Administration → Teams): Задача человеку достаётся только активному члену команды.
+   Демо-База знаний и рабочий календарь AutoPro Service в EspoCRM (повтор безопасен, правки
+   Заказчика не затирает):
+   ```
+   make espocrm-knowledge
+   ```
+7. Залить workflow:
    ```
    make workflows
    ```
@@ -102,37 +156,146 @@ HTTP→HTTPS редиректит traefik. Порт 8443 снаружи закр
    (передаются через stdin, на диск ноутбука не пишутся), импорт всех `n8n/workflows/*.json`,
    `publish:workflow` каждого и перезапуск n8n — вебхуки регистрируются только при старте.
    Повторять после каждой правки workflow.
-7. Вебхуки внешних сервисов — см. ниже: Meta и Telegram.
+8. Вебхук Meta — см. ниже. Telegram вебхука не держит: бот только шлёт алерты разработчикам.
 
 После правки `.env` на VPS — `make deploy` (n8n перечитает переменные при пересоздании).
-Версии образов: `N8N_VERSION`, `CADDY_VERSION` в `.env`, по умолчанию из `deploy/docker-compose.yml`.
+Версии образов: `N8N_VERSION`, `CADDY_VERSION`, `ESPOCRM_VERSION`, `POSTGRES_VERSION` в `.env`,
+по умолчанию из `deploy/docker-compose.yml`.
+
+### EspoCRM
+
+Вход: `https://crm.n3spark.io`, пользователь `admin`, пароль — `ESPOCRM_ADMIN_PASSWORD` из
+`~/uala/.env`. Этот пароль и `ESPOCRM_DB_PASSWORD` действуют только при первой установке.
+Дальше пароль admin меняют в самой EspoCRM, а пароль базы хранится в томе Postgres.
+
+Свои сущности и поля лежат в модуле `deploy/espocrm/custom/Espo/Modules/Uala`. Он входит в образ,
+кликать в админке ничего не нужно:
+
+- `Resources/metadata/entityDefs/<Сущность>.json` — поля, связи, индексы; `Contact.json`
+  только дополняет встроенного Клиента;
+- `scopes/`, `clientDefs/`, `Controllers/` — регистрация своей сущности и её REST API;
+- `Resources/layouts/` — раскладки экранов, `Resources/i18n/pl_PL` и `en_US` — подписи.
+
+Как обновить:
+
+- Сущности или поля: правка модуля → `make deploy`. Образ пересобирается, `rebuild` добавляет
+  таблицы и колонки. Удалённые поля остаются в базе колонками, EspoCRM их не удаляет.
+  Новой сущности, с которой работает n8n, нужно право в `ROLE_ACL`
+  (`scripts/espocrm_bootstrap.py`) и повтор `make espocrm-api-user`.
+- Версия EspoCRM: `ESPOCRM_VERSION` в `.env` (тег `espocrm/espocrm:<версия>-apache`) →
+  `make deploy`. При старте entrypoint сам делает `migrate`. Сначала прогнать тесты с новой
+  версией: `docker-compose.test.yml` собирает образ с версией по умолчанию из `deploy/espocrm/Dockerfile`.
+- Правки из админки (Entity Manager, Layout Manager) хранятся в томе `espocrm_custom`
+  (`custom/Espo/Custom`) и переживают пересборку. Их раскладки перекрывают раскладки модуля.
+  То, что нужно воспроизводимо, переносить в модуль.
+
+Валюта по умолчанию — USD: `ESPOCRM_DEFAULT_CURRENCY=PLN` без PLN в `currencyList` ломает
+`rebuild` (деление на ноль в курсах). PLN включают в админке: Administration → Currency.
+
+WebSocket включён (`ESPOCRM_CONFIG_USE_WEB_SOCKET`). Сервер — контейнер `espocrm-websocket`,
+браузер ходит на `wss://crm.n3spark.io/ws`. Новое Сообщение двигает «Ostatnia wiadomość» Беседы
+(`lastMessageAt`, хук `TouchConversation`): EspoCRM публикует сохранение Беседы, открытый экран
+перечитывает её вместе с панелью Сообщений. Cron EspoCRM (уведомления, письма, повторы хуков)
+работает в `espocrm-daemon`.
+
+О назначенной Задаче человеку сотрудник узнаёт из уведомления CRM и письма на свой адрес. Письма
+EspoCRM шлёт заданием раз в 2 минуты через тот же ящик, что и отчёты владельцу: `make espocrm-api-user`
+(`scripts/espocrm_bootstrap.py`) заводит в CRM групповой ящик `SMTP_FROM` со SMTP из `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, делает его системным адресом отправителя и
+включает «Email notifications upon assignment». Сменили SMTP в `.env` — запустить `make espocrm-api-user`
+снова. Без `SMTP_HOST` писем нет, остаются уведомления в CRM.
 
 ### Meta
 
 URL вебхука `https://n8n.n3spark.io/webhook/meta`, verify token — `META_VERIFY_TOKEN` из `.env`.
-Пошагово для Заказчика — [docs/meta-setup.md](docs/meta-setup.md).
+Messenger, Instagram Direct и WhatsApp приходят в этот вебхук, подпись одна — `META_APP_SECRET`
+приложения. Заказчика находим по странице (`companies.messenger_page_id`), аккаунту Instagram
+(`companies.instagram_account_id`, сид — `DEMO_INSTAGRAM_ACCOUNT_ID`) или номеру
+(`companies.whatsapp_phone_number_id`, сид — `DEMO_WHATSAPP_PHONE_NUMBER_ID`).
+Пошагово для Заказчика — [docs/meta-setup.md](docs/meta-setup.md) и
+[docs/whatsapp-setup.md](docs/whatsapp-setup.md).
 
-### Telegram
+Instagram Direct идёт через Messenger Platform: аккаунт Instagram связан со страницей Facebook,
+ответ уходит в тот же Send API `/me/messages` с токеном этой страницы (`INSTAGRAM_ACCESS_TOKEN`).
+Правило 24 часов как у Messenger: позже — только ответ сотрудника с меткой `HUMAN_AGENT`, до 7 дней.
 
-Бот пишет в группу Заказчика (`companies.telegram_chat_id`) и принимает нажатия кнопок
-через вебхук `https://n8n.n3spark.io/webhook/telegram`. Регистрация (на VPS, где лежат секреты):
+WhatsApp отвечает через Cloud API номера (`WHATSAPP_ACCESS_TOKEN`). В течение 24 часов с
+последнего сообщения Клиента ответ уходит свободным текстом. Позже уходит шаблон `news_update`:
+на pl, если Беседа на польском, иначе на en.
 
-```
-ssh n3-vps
-cd uala
-TELEGRAM_BOT_TOKEN=$(grep '^TELEGRAM_BOT_TOKEN=' .env | cut -d= -f2-)
-TELEGRAM_WEBHOOK_SECRET=$(grep '^TELEGRAM_WEBHOOK_SECRET=' .env | cut -d= -f2-)
-curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
-  -d url=https://n8n.n3spark.io/webhook/telegram \
-  -d secret_token="$TELEGRAM_WEBHOOK_SECRET" \
-  -d 'allowed_updates=["callback_query"]'
-curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
-```
+### Напоминания о Записи
 
-`getWebhookInfo` должен показать этот URL и пустой `last_error_message`. Workflow
-`telegram-callback` отвечает 401 на запрос без заголовка `X-Telegram-Bot-Api-Secret-Token`,
-равного `TELEGRAM_WEBHOOK_SECRET`. У бота один вебхук: `setWebhook` заменяет прежний, поэтому
-боту нужен свой токен, не общий с другим сервисом.
+`appointment-reminders` идёт по расписанию (`REMINDER_SCHEDULE_CRON`, по умолчанию раз в 5 минут) и
+напоминает о Записях, поставленных Ассистентом: за 24 часа и за 2 часа, каждый срок один раз. Время
+и статус Записи берутся из CRM: перенесённая сотрудником Запись напоминается по новому времени,
+отменённая (`Not Held`) — не напоминается. Срок, наступивший раньше, чем Клиент записался, пропускается.
+Не ушло (сбой WhatsApp или SMSAPI) — следующий запуск повторит через 5 минут, пока срок не прошёл.
+
+Клиент из WhatsApp получает шаблон `appointment_reminder` (дата и время, pl или en). Messenger и
+Instagram Автоматизации после 24 часов не пускают, поэтому Клиенту оттуда уходит SMS через SMSAPI
+(`SMSAPI_TOKEN`, `SMSAPI_SENDER`) на телефон из Заявки, тоже на pl или en. Запустить сразу:
+`curl -X POST https://n8n.n3spark.io/webhook/reminders -H "X-Retry-Secret: $RETRY_WEBHOOK_SECRET"`.
+
+### Статус ремонта
+
+Заказ-наряд (`RepairOrder`) связан с Клиентом, Автомобилем и Записью. Мастер меняет его статус в
+EspoCRM, хук модуля Uala сразу зовёт `repair-status` с новым статусом и Беседами Клиента. Клиенту
+уходят три статуса: «Przyjęty do serwisu» (машину приняли), «Czeka na części» (ждём запчасти),
+«Gotowy do odbioru» (можно забирать). «Nowe», «Diagnostyka», «W naprawie», «Zamknięte» — внутренние.
+Сообщение идёт в Беседу, где Клиент писал последним: из WhatsApp — шаблоном `repair_accepted`,
+`repair_waiting_for_parts` или `repair_ready` (pl или en), из Messenger и Instagram — SMS через SMSAPI
+на телефон Заявки. Беседы Клиента нет — сообщать некуда. n8n недоступен в момент смены статуса —
+сообщение не уходит, повтора нет.
+
+### Согласие на рекламу, ТО и шины
+
+Ассистент один раз на Клиента (во всех его Беседах в Канале) спрашивает Согласие на рекламу: вопрос
+на языке Клиента дописывается к ответу, где Клиент записался, или, без календаря, где Заявка собрана.
+Ответ Клиента — да или нет, в любой момент Беседы — AI кладёт в ответ, n8n пишет его в Заявку и в
+`Contact.marketingConsent`. «STOP» отзывает Согласие и без AI.
+
+`marketing-reminders` идёт по расписанию (`MARKETING_SCHEDULE_CRON`, по умолчанию каждый день в
+10:00 по Варшаве) и берёт из CRM Клиентов с Согласием: без него напоминания не уходят. Поводы —
+ТО через 11 месяцев после последней Записи Ассистента и сезон шин: летние с 15 марта по 30 апреля,
+зимние с 1 октября по 30 ноября. Каждый повод — один раз, за запуск Клиенту — одно напоминание.
+Клиент из WhatsApp получает шаблон (`service_reminder`, `summer_tyres_reminder`,
+`winter_tyres_reminder`, pl или en), из Messenger и Instagram — SMS через SMSAPI на телефон Заявки
+с подсказкой, как отказаться. Запустить сразу, например за другой день:
+`curl -X POST https://n8n.n3spark.io/webhook/marketing -H "X-Retry-Secret: $RETRY_WEBHOOK_SECRET" -H 'Content-Type: application/json' -d '{"today": "2026-10-01"}'`.
+
+### Отзывы после ремонта
+
+Мастер закрыл Заказ-наряд («Zamknięte») — Клиент один раз получает просьбу оценить ремонт от 1 до 5:
+из WhatsApp — шаблон `repair_rating_request` с кнопками 1–5, из Messenger и Instagram — SMS с просьбой
+ответить цифрой в Канале, где он писал (ответ на SMS до n8n не доходит). Повторное закрытие того же
+Заказ-наряда второго запроса не шлёт. Ответ Клиента — одна цифра в течение 14 дней — Ассистент не
+разбирает: за 4–5 Клиенту уходит ссылка на отзыв в Google из профиля Заказчика
+(`companies.google_review_url`, docs/knowledge-base.md; ссылки нет — просто спасибо), за 1–3 — извинение
+и Задача человеку «Zła ocena naprawy» группе `Administratorzy`. Оценка ставится один раз, следующая
+цифра — обычное Сообщение Ассистенту. Запрос и ответ на оценку в Беседу CRM не пишутся.
+
+### Смета
+
+Машину приняли («Przyjęty do serwisu») — `repair-status` даёт Задачу человеку «Kosztorys: <Заказ-наряд>»
+группе `Mechanicy` (наименее загруженному мастеру), задача висит на Заказ-наряде. Одна на Заказ-наряд:
+повторное «приняли» второй не даёт. Мастер заводит в Заказ-наряде Смету (`Estimate`: название, сумма,
+описание) и ставит ей статус «Gotowy» — хук модуля Uala сразу зовёт `estimates`, и Смета уходит Клиенту в
+Беседу, где он писал последним: из WhatsApp — шаблоном `estimate_ready` с названием и суммой, из
+Messenger и Instagram — SMS на телефон Заявки (pl или en). Клиент молчит — уточнение `estimate_reminder`
+через сутки и ещё одно через двое суток, ещё через двое — Задача человеку «Klient milczy po kosztorysie»
+группе `Administratorzy`. Уточнения идут по расписанию `ESTIMATE_SCHEDULE_CRON` (по умолчанию раз в час
+с 9 до 18, кроме воскресенья). Цепочка стоит, когда Клиент написал в Канал Беседы после Сметы или
+сотрудник сменил статус Сметы («Zaakceptowany», «Odrzucony», «Szkic»); снова «Gotowy» — Смета уходит
+заново. Ответ на SMS до нас не доходит: Клиент из Messenger и Instagram останавливает цепочку, только
+написав в Канал. Запустить сразу:
+`curl -X POST https://n8n.n3spark.io/webhook/estimates -H "X-Retry-Secret: $RETRY_WEBHOOK_SECRET"`.
+
+### Алерт «AI не отвечает»
+
+AI не ответил дважды подряд — бот (`TELEGRAM_BOT_TOKEN`) пишет в группу разработчиков
+`ALERT_TELEGRAM_CHAT_ID`: Заказчик, Клиент, последнее сообщение. Тот же алерт уходит, когда обработка
+сообщения из буфера падает третий раз подряд (CRM или база лежат): Клиент ждёт, retry повторяет. Заказчик алерт не получает:
+Заявки и Передачи человеку он видит в EspoCRM. Бот только шлёт сообщения, вебхука у него нет.
 
 ### Retry
 
@@ -140,9 +303,32 @@ curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
 сразу: `curl -X POST https://n8n.n3spark.io/webhook/retry -H "X-Retry-Secret: $RETRY_WEBHOOK_SECRET"`
 (пустой секрет — ручной запуск закрыт).
 
-Retry берёт только то, что не менялось последние 2 минуты: свежее ещё доставляет основной поток.
-В таблицу дописываются только `qualified` Заявки; в Telegram — «Новая заявка» для `qualified`,
-сводка Передачи человеку для `needs_human` и недошедшие алерты «AI не отвечает».
+Алерт «AI не отвечает» retry дошлёт, если основной поток не отправил его за 2 минуты.
+Сообщение буфера без отметки об обработке retry берёт, если его взяли в работу больше 5 минут назад:
+основной поток с повторами вызова AI укладывается в две минуты. Сообщение, Заявку или Передачу
+человеку, запись которых в CRM не началась вовсе (n8n упал раньше), retry берёт через 5 минут после
+появления. Ответ Клиенту из очереди отправки, который Канал не принял, retry повторяет час.
+
+### Отчёты владельцу
+
+`owner-report` шлёт владельцу (`OWNER_REPORT_EMAIL`, от `SMTP_FROM`) письмо на польском: дневной
+отчёт — за вчера (`REPORT_DAILY_CRON`, по умолчанию 7:00), недельный — за прошлую неделю
+с понедельника по воскресенье (`REPORT_WEEKLY_CRON`, по умолчанию понедельник 7:00). Время —
+по Варшаве (`GENERIC_TIMEZONE`). По строке на Канал и итог: Заявки (`Lead`) и Записи (`Meeting`),
+созданные в CRM за период, и конверсия — Записи / Заявки. Канал — поле «Kanał» Заявки и Записи:
+его ставит переходник CRM, сотрудник выбирает его сам для Заявки, принятой по телефону или лично;
+без Канала — строка «Bez kanału». Отчёты EspoCRM (платный Advanced Pack) не нужны.
+
+Письмо уходит через SMTP из `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`
+(credentials SMTP собирает `scripts/n8n_credentials.py`, после правки — `make workflows`). CRM
+не ответила — письма нет, ошибка в выполнениях n8n. Запустить сразу, например за другой день:
+
+```bash
+curl -X POST https://n8n.n3spark.io/webhook/owner-report -H "X-Report-Secret: $REPORT_WEBHOOK_SECRET" \
+  -H 'Content-Type: application/json' -d '{"period": "weekly", "today": "2026-10-26"}'
+```
+
+`period` — `daily` или `weekly`, `today` (необязательно) — день, в который будто бы идёт запуск.
 
 ## Правка workflow
 

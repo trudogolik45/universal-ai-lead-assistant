@@ -1,6 +1,6 @@
 {
   "id": "uala0retryLeads0",
-  "name": "Retry leads and close silent conversations",
+  "name": "Retry inbox and leads, close silent conversations",
   "active": false,
   "settings": {
     "executionOrder": "v1",
@@ -121,150 +121,6 @@
       "parameters": {}
     },
     {
-      "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000007",
-      "name": "Find undelivered leads",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        880,
-        -100
-      ],
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Заявки, не дошедшие до Канала доставки, который есть у Заказчика. Свежие (2 минуты) ещё\n-- доставляет основной поток. Sheets — только qualified и с таблицей, как основной поток.\n-- Telegram: qualified — «Новая заявка» (telegram_sent_at), needs_human — сводка (handoff_sent_at);\n-- отметки проверяет и сам notify-lead.\nwith pending as (\n  select l.id, l.created_at,\n    (l.status = 'qualified' and l.sheets_delivered_at is null and co.sheets_spreadsheet_id is not null)\n      as sheets_pending,\n    (co.telegram_chat_id is not null and case l.status when 'qualified' then l.telegram_sent_at is null\n      else l.handoff_sent_at is null end) as telegram_pending\n  from leads l\n  join companies co on co.id = l.company_id\n  where l.status in ('qualified', 'needs_human') and l.updated_at < now() - interval '2 minutes'\n)\nselect id as lead_id, sheets_pending\nfrom pending\nwhere sheets_pending or telegram_pending\norder by created_at",
-        "options": {}
-      },
-      "credentials": {
-        "postgres": {
-          "id": "uala0postgres001",
-          "name": "Supabase"
-        }
-      }
-    },
-    {
-      "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000008",
-      "name": "Sheets pending",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        1100,
-        -200
-      ],
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "combinator": "and",
-          "conditions": [
-            {
-              "id": "c1",
-              "leftValue": "={{ $json.sheets_pending }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ]
-        },
-        "options": {}
-      }
-    },
-    {
-      "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000009",
-      "name": "Deliver lead",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [
-        1320,
-        -200
-      ],
-      "onError": "continueRegularOutput",
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "value": "uala0deliverLead",
-          "mode": "id"
-        },
-        "mode": "each",
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "lead_id": "={{ $json.lead_id }}"
-          },
-          "matchingColumns": [
-            "lead_id"
-          ],
-          "schema": [
-            {
-              "id": "lead_id",
-              "displayName": "lead_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
-        },
-        "options": {
-          "waitForSubWorkflow": true
-        }
-      }
-    },
-    {
-      "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000010",
-      "name": "Notify lead",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [
-        1100,
-        0
-      ],
-      "onError": "continueRegularOutput",
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "value": "uala0notifyLead0",
-          "mode": "id"
-        },
-        "mode": "each",
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "lead_id": "={{ $json.lead_id }}"
-          },
-          "matchingColumns": [
-            "lead_id"
-          ],
-          "schema": [
-            {
-              "id": "lead_id",
-              "displayName": "lead_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
-        },
-        "options": {
-          "waitForSubWorkflow": true
-        }
-      }
-    },
-    {
       "id": "e9a1c5b0-0d6b-4a43-9a0e-000000000011",
       "name": "Close silent conversations",
       "type": "n8n-nodes-base.postgres",
@@ -296,7 +152,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Алерты «AI не отвечает», не дошедшие до группы Заказчика. Свежие (2 минуты) шлёт основной поток.\nselect m.id as message_id\nfrom messages m\njoin companies c on c.id = m.company_id\nwhere m.ai_failed_at < now() - interval '2 minutes' and m.ai_alert_sent_at is null\n  and c.telegram_chat_id is not null\norder by m.ai_failed_at",
+        "query": "-- Алерты «AI не отвечает», не дошедшие до разработчиков. Свежие (2 минуты) шлёт основной поток.\nselect id as message_id\nfrom messages\nwhere ai_failed_at < now() - interval '2 minutes' and ai_alert_sent_at is null\norder by ai_failed_at",
         "options": {}
       },
       "credentials": {
@@ -350,6 +206,413 @@
           "waitForSubWorkflow": true
         }
       }
+    },
+    {
+      "id": "d1e2f3a4-0000-4000-8000-000000000901",
+      "name": "Claim stale inbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        900
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Буфер: обработка не дошла до конца (сбой, рестарт n8n). Взятые меньше 5 минут назад\n-- ещё в работе у основного потока или прошлого retry: вызов AI с повторами идёт до двух минут.\nupdate inbox set claimed_at = now()\nwhere processed_at is null and claimed_at < now() - interval '5 minutes'\nreturning id as inbox_id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "d1e2f3a4-0000-4000-8000-000000000902",
+      "name": "Process message",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        900
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0processInbx",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "inbox_id": "={{ $json.inbox_id }}"
+          },
+          "matchingColumns": [
+            "inbox_id"
+          ],
+          "schema": [
+            {
+              "id": "inbox_id",
+              "displayName": "inbox_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c7d2a1e3-0000-4000-8000-000000000001",
+      "name": "Find messages not in CRM",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        1100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Сообщения, не дошедшие до CRM (CRM лежала, сбой n8n): попытка старше 5 минут или, если записи\n-- не было вовсе (n8n упал до неё), Сообщение старше 5 минут. Взятие в работу атомарно — дубля нет.\n-- По порядку Беседы: Сообщения ложатся в CRM в том же порядке.\nselect id as message_id from messages\nwhere crm_message_id is null and coalesce(crm_claimed_at, created_at) < now() - interval '5 minutes'\norder by created_at\nlimit 200",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e3-0000-4000-8000-000000000002",
+      "name": "Write message to CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        1100
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmWriteMsg",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.message_id }}"
+          },
+          "matchingColumns": [
+            "message_id"
+          ],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e5f6a7b8-0000-4000-8000-000000000241",
+      "name": "Find handoffs without task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        1300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Передачи человеку без Задачи в CRM (CRM лежала, сбой n8n): попытка старше 5 минут или, если попытки\n-- не было вовсе (n8n упал сразу после Передачи), Заявка старше 5 минут. Взятие в работу атомарно.\nselect id as lead_id from leads\nwhere status = 'needs_human' and handoff_task_id is null\n  and coalesce(handoff_task_claimed_at, created_at) < now() - interval '5 minutes'\norder by created_at\nlimit 200",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "e5f6a7b8-0000-4000-8000-000000000242",
+      "name": "Create handoff task",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        1300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0handoffTask",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}"
+          },
+          "matchingColumns": [
+            "lead_id"
+          ],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Заявки, не дописанные в CRM: запись упала (CRM лежала, сбой n8n) или Заявка изменилась во время записи.\n-- Взятые в работу меньше 5 минут назад ещё пишет основной поток. Заявку без попытки записи\n-- (Ассистент ещё не ответил) в CRM писать нечего.\nselect c.lead_id from crm_leads c\njoin leads l on l.id = c.lead_id\nwhere (c.written_at is null or c.written_at < l.updated_at)\n  and (c.claimed_at is null or c.claimed_at < now() - interval '5 minutes')\norder by l.updated_at\nlimit 200",
+        "options": {}
+      },
+      "id": "c7d2a1e3-0022-4000-8000-000000000001",
+      "name": "Find leads not in CRM",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        1500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "c7d2a1e3-0022-4000-8000-000000000002",
+      "name": "Write lead to CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        1500
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmWriteLed",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}"
+          },
+          "matchingColumns": [
+            "lead_id"
+          ],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Оценки 1–3 без Задачи в CRM (CRM лежала, сбой n8n): попытка старше 5 минут.\nselect company_id, crm_repair_order_id from repair_ratings\nwhere rating <= 3 and crm_task_id is null\n  and coalesce(task_claimed_at, rated_at) < now() - interval '5 minutes'\norder by rated_at\nlimit 200",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0032-4000-8000-000000000001",
+      "name": "Find bad ratings without task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        1700
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0ratingTask0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "company_id": "={{ $json.company_id }}",
+            "crm_repair_order_id": "={{ $json.crm_repair_order_id }}"
+          },
+          "matchingColumns": [
+            "company_id",
+            "crm_repair_order_id"
+          ],
+          "schema": [
+            {
+              "id": "company_id",
+              "displayName": "company_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "crm_repair_order_id",
+              "displayName": "crm_repair_order_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "a1b2c3d4-0032-4000-8000-000000000002",
+      "name": "Create rating task",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        1700
+      ]
+    },
+    {
+      "id": "a3d6659c-4c5a-48c9-af42-83e15e245ab0",
+      "name": "Find unsent messages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        1900
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Очередь отправки: Клиенту не ушло (Канал не принял, сбой n8n), попытка старше 5 минут.\n-- Повторы — час (12 попыток): дальше ответ устарел, Беседу видит сотрудник в CRM.\nselect id as outbox_id from outbox\nwhere sent_at is null and claimed_at < now() - interval '5 minutes' and attempts < 12\norder by created_at\nlimit 200",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "db02e696-777f-4972-ad3c-7365efb4143f",
+      "name": "Send again",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        1900
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0sendClient0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "outbox_id": "={{ $json.outbox_id }}"
+          },
+          "matchingColumns": [
+            "outbox_id"
+          ],
+          "schema": [
+            {
+              "id": "outbox_id",
+              "displayName": "outbox_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -408,11 +671,6 @@
       "main": [
         [
           {
-            "node": "Find undelivered leads",
-            "type": "main",
-            "index": 0
-          },
-          {
             "node": "Close silent conversations",
             "type": "main",
             "index": 0
@@ -421,31 +679,34 @@
             "node": "Find missed AI alerts",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Find undelivered leads": {
-      "main": [
-        [
+          },
           {
-            "node": "Sheets pending",
+            "node": "Claim stale inbox",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Notify lead",
+            "node": "Find messages not in CRM",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Sheets pending": {
-      "main": [
-        [
+          },
           {
-            "node": "Deliver lead",
+            "node": "Find handoffs without task",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find leads not in CRM",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find bad ratings without task",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find unsent messages",
             "type": "main",
             "index": 0
           }
@@ -457,6 +718,72 @@
         [
           {
             "node": "Alert AI failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim stale inbox": {
+      "main": [
+        [
+          {
+            "node": "Process message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find messages not in CRM": {
+      "main": [
+        [
+          {
+            "node": "Write message to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find handoffs without task": {
+      "main": [
+        [
+          {
+            "node": "Create handoff task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find leads not in CRM": {
+      "main": [
+        [
+          {
+            "node": "Write lead to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find bad ratings without task": {
+      "main": [
+        [
+          {
+            "node": "Create rating task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find unsent messages": {
+      "main": [
+        [
+          {
+            "node": "Send again",
             "type": "main",
             "index": 0
           }

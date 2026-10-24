@@ -1,0 +1,23 @@
+{
+    "fields": {
+        "vehicle": "Pojazd",
+        "channel": "Kanał",
+        "repairOrders": "Zlecenia naprawy"
+    },
+    "links": {
+        "vehicle": "Pojazd",
+        "repairOrders": "Zlecenia naprawy"
+    },
+    "options": {
+        "channel": {
+            "": "",
+            "messenger": "Messenger",
+            "instagram": "Instagram",
+            "whatsapp": "WhatsApp",
+            "call": "Telefon"
+        }
+    },
+    "tooltips": {
+        "channel": "Skąd przyszedł klient. Asystent wpisuje go sam; dla zgłoszeń przyjętych osobiście lub przez telefon wybierz ręcznie. Liczy się w raportach dla właściciela."
+    }
+}

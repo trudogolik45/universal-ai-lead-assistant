@@ -39,7 +39,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- AI не ответил на Сообщение, алерт ещё не ушёл, у Заказчика есть группа; иначе 0 строк = стоп.\nselect m.id as message_id, c.name as company_name, c.telegram_chat_id,\n  v.channel, v.sender_id, m.text\nfrom messages m\njoin conversations v on v.id = m.conversation_id and v.company_id = m.company_id\njoin companies c on c.id = m.company_id\nwhere m.id = $1::uuid and m.ai_failed_at is not null and m.ai_alert_sent_at is null\n  and c.telegram_chat_id is not null",
+        "query": "-- AI не ответил на Сообщение, алерт ещё не ушёл; иначе 0 строк = стоп.\nselect m.id as message_id, c.name as company_name,\n  v.channel, v.sender_id, m.text\nfrom messages m\njoin conversations v on v.id = m.conversation_id and v.company_id = m.company_id\njoin companies c on c.id = m.company_id\nwhere m.id = $1::uuid and m.ai_failed_at is not null and m.ai_alert_sent_at is null",
         "options": {
           "queryReplacement": "={{ [$json.message_id] }}"
         }
@@ -62,7 +62,7 @@
       ],
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Алерт группе Заказчика: AI не ответил дважды, Клиенту никто не ответил.\nconst alert = $json;\nconst text = [\n  'AI не отвечает — ответьте Клиенту сами',\n  `Заказчик: ${alert.company_name}`,\n  `Клиент: ${alert.channel} ${alert.sender_id}`,\n  `Последнее сообщение: ${alert.text ?? '—'}`,\n].join('\\n');\nreturn { chat_id: alert.telegram_chat_id, text };"
+        "jsCode": "// Алерт группе разработчиков: AI не ответил дважды, Клиенту никто не ответил.\n// Заказчик его не видит.\nconst alert = $json;\nconst text = [\n  'AI не отвечает',\n  `Заказчик: ${alert.company_name}`,\n  `Клиент: ${alert.channel} ${alert.sender_id}`,\n  `Последнее сообщение: ${alert.text ?? '—'}`,\n].join('\\n');\nreturn { chat_id: $env.ALERT_TELEGRAM_CHAT_ID, text };"
       }
     },
     {

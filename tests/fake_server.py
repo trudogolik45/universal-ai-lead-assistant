@@ -1,15 +1,18 @@
-"""Фейк внешних API (OpenRouter, Meta Graph, Telegram, Google Sheets, CRM) на хосте.
+"""Фейк внешних API (OpenRouter, Meta Graph, Telegram, EspoCRM) на хосте.
 
-Один HTTP-сервер, у каждого API свой префикс пути: /openrouter, /meta, /telegram, /sheets,
-/google-oauth (токен service account), /crm.
+Один HTTP-сервер, у каждого API свой префикс пути: /openrouter, /meta, /telegram,
+/espocrm (REST API EspoCRM), /n8n (вебхуки, которые хуки EspoCRM шлют n8n).
 n8n ходит сюда по базовым URL из env (`*_BASE_URL`), см. `FakeServer.base_urls`.
 
 Тест задаёт ответы через `respond` и читает полученные запросы через `requests`.
+API с состоянием (EspoCRM, tests/fake_espocrm.py) подключается через `mount`: отвечает на всё под
+своим префиксом, а `respond` на точный путь главнее него.
 Незаданный маршрут отвечает 200 и `{}`: записывающим API (Send API, Telegram) этого хватает.
 """
 
 import json
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -18,14 +21,20 @@ BASE_URL_ENV = {
     "OPENROUTER_BASE_URL": "/openrouter",
     "META_GRAPH_BASE_URL": "/meta",
     "TELEGRAM_API_BASE_URL": "/telegram",
-    "GOOGLE_SHEETS_BASE_URL": "/sheets",
-    "GOOGLE_OAUTH_BASE_URL": "/google-oauth",
+    "ESPOCRM_BASE_URL": "/espocrm",
+    "SMSAPI_BASE_URL": "/smsapi",
 }
 
 # Хост фейка, каким его видит n8n из контейнера.
 CONTAINER_HOST = "host.docker.internal"
 # Сколько фейк ждёт, пока клиент закроет соединение после ответа.
 CLIENT_CLOSE_TIMEOUT = 60
+
+
+class Server(ThreadingHTTPServer):
+    # Очередь входящих соединений: по умолчанию 5. n8n шлёт запросы узла по всем items разом (отчёт
+    # владельцу — 10 запросов к CRM), лишние соединения сбрасывались — «connection closed unexpectedly».
+    request_queue_size = 128
 
 
 @dataclass
@@ -49,8 +58,9 @@ class FakeServer:
     def __init__(self):
         self._lock = threading.Lock()
         self._routes: dict[tuple[str, str], list[Response]] = {}
+        self._mounts: dict[str, Callable[[Request], Response]] = {}
         self._requests: list[Request] = []
-        self._httpd = ThreadingHTTPServer(("0.0.0.0", 0), self._handler_class())
+        self._httpd = Server(("0.0.0.0", 0), self._handler_class())
         self.port = self._httpd.server_address[1]
 
     def start(self):
@@ -65,6 +75,12 @@ class FakeServer:
         with self._lock:
             self._routes.clear()
             self._requests.clear()
+        for app in self._mounts.values():
+            app.reset()
+
+    def mount(self, path_prefix: str, app: Callable[[Request], Response]):
+        """Фейк с состоянием под префиксом пути: app(request) → Response, app.reset() на сброс фейка."""
+        self._mounts[path_prefix] = app
 
     def respond(self, method: str, path: str, *responses: Response):
         """Ответы на запросы по пути: по очереди, последний повторяется."""
@@ -76,7 +92,7 @@ class FakeServer:
             return [r for r in self._requests if r.path.startswith(path_prefix)]
 
     def container_url(self, path: str = "") -> str:
-        """URL фейка для n8n в контейнере (например, crm_webhook_url Заказчика)."""
+        """URL фейка для контейнеров стенда (например, адрес вебхука для хука EspoCRM)."""
         return f"http://{CONTAINER_HOST}:{self.port}{path}"
 
     def base_urls(self) -> dict[str, str]:
@@ -86,9 +102,10 @@ class FakeServer:
         with self._lock:
             self._requests.append(request)
             queue = self._routes.get((request.method, request.path.split("?")[0]))
-            if not queue:
-                return Response()
-            return queue.pop(0) if len(queue) > 1 else queue[0]
+            if queue:
+                return queue.pop(0) if len(queue) > 1 else queue[0]
+        app = next((app for prefix, app in self._mounts.items() if request.path.startswith(prefix)), None)
+        return app(request) if app else Response()
 
     def _handler_class(self):
         server = self

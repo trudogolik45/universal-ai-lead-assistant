@@ -1,0 +1,23 @@
+{
+    "fields": {
+        "vehicle": "Vehicle",
+        "channel": "Channel",
+        "repairOrders": "Repair orders"
+    },
+    "links": {
+        "vehicle": "Vehicle",
+        "repairOrders": "Repair orders"
+    },
+    "options": {
+        "channel": {
+            "": "",
+            "messenger": "Messenger",
+            "instagram": "Instagram",
+            "whatsapp": "WhatsApp",
+            "call": "Phone"
+        }
+    },
+    "tooltips": {
+        "channel": "Where the client came from. The assistant fills it in; for walk-in or phone requests choose it by hand. Counted in the owner reports."
+    }
+}

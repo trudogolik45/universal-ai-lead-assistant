@@ -1,88 +1,93 @@
 # База знаний и профиль Заказчика
 
-Профиль Заказчика и База знаний лежат в Supabase (таблицы `companies` и `knowledge_items`,
-схема — `supabase/migrations/0001_schema.sql`). Отдельного интерфейса нет: правки — SQL в
-Supabase SQL Editor или `psql "$DATABASE_URL"`. Ассистент читает профиль и Базу знаний заново
-на каждое входящее Сообщение, поэтому правка действует со следующего Сообщения, без перезапуска
-n8n и без правки workflow.
+База знаний живёт в EspoCRM (сущность `KnowledgeItem`, меню «Baza wiedzy»): Заказчик правит
+услуги, цены, график и адрес сам, в одном месте. Профиль Заказчика пока в Supabase (таблица
+`companies`, схема — `supabase/migrations/`), правки — SQL в Supabase SQL Editor или
+`psql "$DATABASE_URL"`. Ассистент читает профиль и Базу знаний заново на каждое входящее
+Сообщение, поэтому правка действует со следующего Сообщения, без перезапуска n8n и без правки workflow.
 
 Ниже `uniwersalny-serwis` — slug демо-профиля; slug своего Заказчика: `select slug, name from companies;`.
 
 ## Что уходит в промпт
 
-На каждое Сообщение workflow `meta-webhook` собирает:
+На каждое Сообщение workflow `handle-message` собирает:
 
 - `companies.name`, `default_language`, `handoff_rules`, `required_fields`, `ai_model`;
-- всю Базу знаний Заказчика (`kind`, `title`, `body`, `price`) — целиком, без поиска, порядок:
-  `kind`, затем `position`;
+- всю Базу знаний из EspoCRM (`kind`, `name`, `description`, `price`, `priceFrom`) — целиком,
+  без поиска, до 200 записей (предел REST API EspoCRM), порядок — по `kind`;
 - текущую Заявку и последние 20 Сообщений Беседы.
 
 Ассистент отвечает только по Базе знаний: цен, услуг и сроков, которых в ней нет, он не называет,
 а передаёт Беседу человеку. Поэтому всё, о чём Клиент может спросить, должно быть в Базе знаний.
 
-## База знаний (`knowledge_items`)
+EspoCRM недоступна (две попытки подряд) — Ассистент цену не угадывает и Клиенту не отвечает:
+Сообщение остаётся в буфере входящих, и retry (раз в 5 минут) обработает его, когда CRM вернётся.
 
-| Поле | Значение |
+## База знаний (EspoCRM, `KnowledgeItem`)
+
+| Поле (в EspoCRM) | Значение |
 |---|---|
-| `kind` | `service` — услуга, `faq` — вопрос-ответ, `hours` — часы работы, `rule` — правило (например, «термин подтверждает владелец») |
-| `title` | Название услуги или вопрос. Уникально в паре с `kind` у одного Заказчика |
-| `body` | Описание или ответ |
-| `price` | Цена в PLN (`numeric(10,2)`), только для услуг; `null` — цены нет, Ассистент её не назовёт |
-| `position` | Порядок внутри `kind` |
+| `name` (Nazwa) | Название услуги, вопрос FAQ или заголовок сведения |
+| `kind` (Rodzaj) | `service` — услуга, `hours` — график работы, `company` — о компании: адрес, контакты, оплата, гарантия, марки; `faq` — вопрос-ответ; `rule` — правило (чего Ассистент не обещает) |
+| `description` (Treść) | Описание, длительность, оговорки или ответ на вопрос |
+| `price` (Cena, zł) | Цена в PLN с VAT; пусто — цены нет, Ассистент её не назовёт |
+| `priceFrom` (Cena „od”) | Цена минимальная: Ассистент скажет «от … zł» |
 
-Добавить или обновить услугу (повтор не создаёт дубль):
+Править — в EspoCRM: «Baza wiedzy» → запись → «Edytuj», новая — «Dodaj do bazy wiedzy».
+API-пользователь `n8n` Базу знаний только читает (`scripts/espocrm_bootstrap.py`).
 
-```sql
-insert into knowledge_items (company_id, kind, title, body, price, position)
-select id, 'service', 'Montaż karnisza', 'Montaż jednego karnisza z wierceniem.', 90.00, 5
-from companies where slug = 'uniwersalny-serwis'
-on conflict (company_id, kind, title)
-do update set body = excluded.body, price = excluded.price, position = excluded.position;
+Демо-База знаний автосервиса AutoPro Service (`scripts/data/autopro_knowledge.json`, польский
+перевод `docs/autopro_service_knowledge_base.md`) заливается в EspoCRM на VPS:
+
+```sh
+make espocrm-knowledge
 ```
 
-Поменять цену:
+Повтор безопасен: запись ищется по паре (`kind`, `name`), существующие не трогаются, правки
+Заказчика не затираются. Та же команда заводит рабочий календарь AutoPro Service (ниже).
 
-```sql
-update knowledge_items set price = 130.00
-where kind = 'service' and title = 'Montaż mebli'
-  and company_id = (select id from companies where slug = 'uniwersalny-serwis');
-```
+## Рабочий календарь и Записи (EspoCRM, `WorkingTimeCalendar`, `Meeting`)
 
-Добавить вопрос-ответ:
+По рабочему календарю и уже поставленным Записям Ассистент сам считает свободные слоты и
+записывает Клиента в свободный слот без подтверждения человеком. Запись — встроенная встреча
+EspoCRM (`Meeting`, «Spotkanie») со статусом `Planned`, Клиентом (`contacts`), Автомобилем
+(`vehicle`) и Заявкой (`parent`). Готового API слотов в EspoCRM нет, слоты считает переходник CRM.
 
-```sql
-insert into knowledge_items (company_id, kind, title, body, position)
-select id, 'faq', 'Czy wystawiacie fakturę?', 'Tak, fakturę VAT wystawiamy na życzenie.', 3
-from companies where slug = 'uniwersalny-serwis';
-```
+- Календарь — встроенный «Kalendarz czasu pracy» (Administration → Working Time Calendars),
+  берётся первый по имени: у Заказчика он один. Часы по дням недели, часовой пояс (пусто —
+  Europe/Warsaw), праздники и особые дни — исключения календаря («Non-working» — закрыто,
+  «Working» — свои часы). Календаря нет — Ассистент время не подтверждает: принимает желаемое
+  и говорит, что его подтвердит сервис (`desiredTime` Заявки).
+- Слот — час от начала рабочего интервала (8:00, 9:00, … до закрытия), на сегодня и 7 дней вперёд,
+  не раньше чем через час от сейчас. Одно время — одна Запись: слот занят, если с ним пересекается
+  любая Запись, кроме отменённой (`Not Held`). Записи, которые сотрудник ставит в CRM сам, тоже
+  занимают слоты.
+- Без телефона Клиента Записи нет: Ассистент сначала просит номер. Запись у Заявки одна; перенести
+  или отменить — Передача человеку.
+- Два Клиента на одно время: слот на время записи блокируется в Postgres (`slot_locks`), второй
+  получает «этот термин только что заняли, выберите другой» на своём языке.
+- Запись видна в «Spotkania» и у Клиента, Автомобиля и Заявки. Исполнителя у неё нет — мастера
+  Ассистент не выбирает; сотрудник может назначить его в CRM.
 
-Удалить запись:
-
-```sql
-delete from knowledge_items
-where kind = 'faq' and title = 'Czy wystawiacie fakturę?'
-  and company_id = (select id from companies where slug = 'uniwersalny-serwis');
-```
-
-Посмотреть Базу знаний целиком:
-
-```sql
-select kind, position, title, price, body
-from knowledge_items
-where company_id = (select id from companies where slug = 'uniwersalny-serwis')
-order by kind, position;
-```
+Демо-календарь (`make espocrm-knowledge`, по `docs/autopro_service_knowledge_base.md`, раздел 2):
+пн–пт 8:00–18:00, сб 9:00–14:00, вс закрыто, Europe/Warsaw. Создаётся, только если календаря
+«AutoPro Service» ещё нет — правки Заказчика не затираются. График в Базе знаний (`hours`) —
+текст для ответов Клиенту, слоты считаются по календарю: меняя часы, правьте оба.
 
 ## Обязательные поля (`companies.required_fields`)
 
 Поля Заявки, без которых она не становится `qualified`. Допустимы только поля Заявки:
-`name`, `contact`, `service`, `description`, `desired_date`. По умолчанию `{name,contact,service}`.
+`name`, `phone` (телефон, международный формат `+48…`), `contact` (другой контакт, e-mail),
+`vehicle_brand`, `vehicle_model` (марка и модель Автомобиля), `service`, `description`
+(что случилось), `desired_date` (удобное время). По умолчанию `{name,contact,service}`.
 
 Список считает сервер, а не AI: Заявка с `qualified` от AI, но без обязательного поля, остаётся
 `collecting`, недостающие поля — в `leads.missing_fields`. Ассистент дозапрашивает их у Клиента.
 
+Набор автосервиса (спека #17: имя, телефон, марка и модель, что случилось, удобное время):
+
 ```sql
-update companies set required_fields = '{name,contact,service,desired_date}'
+update companies set required_fields = '{name,phone,vehicle_brand,vehicle_model,description,desired_date}'
 where slug = 'uniwersalny-serwis';
 ```
 
@@ -112,11 +117,21 @@ update companies set reply_mode = 'silent' where slug = 'uniwersalny-serwis';
 
 ## Язык по умолчанию (`companies.default_language`)
 
-`pl`, `en` или `ru`. Ассистент отвечает на языке Клиента; язык по умолчанию — когда язык
+Код ISO 639-1 одного из языков Европы (`pl`, `en`, `de`, `uk` и т. д., список — миграция
+`0006_european_languages.sql`). Ассистент отвечает на языке Клиента; язык по умолчанию — когда язык
 Клиента не определить.
 
 ```sql
 update companies set default_language = 'en' where slug = 'uniwersalny-serwis';
+```
+
+## Отзыв в Google (`companies.google_review_url`)
+
+Ссылка «оставить отзыв» профиля компании в Google (Google Business Profile → «Poproś o opinie»).
+Её получает Клиент, оценивший ремонт на 4 или 5. Пусто — Клиент получает только спасибо.
+
+```sql
+update companies set google_review_url = 'https://g.page/r/<id>/review' where slug = 'uniwersalny-serwis';
 ```
 
 ## Модель AI (`companies.ai_model`)
@@ -128,22 +143,15 @@ update companies set default_language = 'en' where slug = 'uniwersalny-serwis';
 update companies set ai_model = '<id модели с openrouter.ai/models>' where slug = 'uniwersalny-serwis';
 ```
 
-## Каналы доставки
+## Каналы
 
-Куда приходят Заявки, тоже в `companies`:
+Заявки, Клиенты и Задачи человеку Заказчик видит в своей EspoCRM. По идентификатору Канала
+входящее Сообщение находит Заказчика, поля тоже в `companies`:
 
 | Поле | Что это | Инструкция |
 |---|---|---|
-| `sheets_spreadsheet_id`, `sheets_sheet_name` | Google-таблица и лист (по умолчанию `Leads`) | [google-setup.md](google-setup.md) |
-| `telegram_chat_id` | Группа Telegram для уведомлений и Передачи человеку | README, «Telegram» |
-| `crm_webhook_url` | CRM-webhook | [crm-webhook.md](crm-webhook.md) |
-| `messenger_page_id` | id страницы Facebook: по нему входящее Сообщение находит Заказчика | [meta-setup.md](meta-setup.md) |
-
-```sql
-update companies
-set sheets_spreadsheet_id = '<id таблицы из URL>', telegram_chat_id = '-100...'
-where slug = 'uniwersalny-serwis';
-```
+| `messenger_page_id` | id страницы Facebook | [meta-setup.md](meta-setup.md) |
+| `whatsapp_phone_number_id` | Phone number ID номера WhatsApp | [whatsapp-setup.md](whatsapp-setup.md) |
 
 ## Новый Заказчик
 
@@ -153,7 +161,7 @@ values ('nowa-firma', 'Nowa Firma', 'pl', 'auto', '{name,contact,service}',
         'Przekaż człowiekowi: reklamacje.', '<id страницы>');
 ```
 
-Затем База знаний — запросами выше с `slug = 'nowa-firma'`.
+Затем База знаний — в EspoCRM Заказчика, см. выше.
 
 ## Удаление данных Клиента
 

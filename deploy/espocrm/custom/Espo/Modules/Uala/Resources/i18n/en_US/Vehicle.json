@@ -1,0 +1,22 @@
+{
+    "fields": {
+        "brand": "Brand",
+        "model": "Model",
+        "year": "Year",
+        "licensePlate": "License plate",
+        "vin": "VIN",
+        "contact": "Client",
+        "leads": "Leads",
+        "meetings": "Meetings",
+        "repairOrders": "Repair orders"
+    },
+    "links": {
+        "contact": "Client",
+        "leads": "Leads",
+        "meetings": "Meetings",
+        "repairOrders": "Repair orders"
+    },
+    "labels": {
+        "Create Vehicle": "Create Vehicle"
+    }
+}

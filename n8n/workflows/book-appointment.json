@@ -1,0 +1,276 @@
+{
+  "id": "uala0bookAppoint",
+  "name": "Book appointment",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "conversation_id",
+              "type": "string"
+            },
+            {
+              "name": "slot",
+              "type": "object"
+            },
+            {
+              "name": "lead",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "id": "c7d2a1e2-0028-4000-8000-000000000001",
+      "name": "Appointment to book",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Запись для сотрудников — по-польски: кто, на какой Автомобиль, что сделать.\nconst { slot, lead } = $json;\nconst vehicle = [lead.vehicle_brand, lead.vehicle_model].filter(Boolean).join(' ');\nconst description = [\n  lead.service && `Usługa: ${lead.service}`,\n  lead.description && `Opis: ${lead.description}`,\n  lead.phone && `Telefon: ${lead.phone}`,\n].filter(Boolean).join('\\n');\nreturn {\n  json: {\n    conversation_id: $json.conversation_id,\n    starts_at: slot.starts_at,\n    ends_at: slot.ends_at,\n    name: `Wizyta: ${[lead.name || 'klient', vehicle].filter(Boolean).join(', ')}`,\n    description,\n  },\n};"
+      },
+      "id": "c7d2a1e2-0028-4000-8000-000000000002",
+      "name": "Appointment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Слот ставит один Клиент: блокировка (Заказчик, начало слота) на время «проверить слот в CRM →\n-- создать Запись». Строки нет — этот слот прямо сейчас ставит другой Клиент: для этого он занят.\n-- Время слота — UTC, как в CRM.\ninsert into slot_locks (company_id, starts_at, locked_until)\nselect company_id, $2::timestamp at time zone 'UTC', now() + interval '2 minutes'\nfrom conversations where id = $1::uuid\non conflict (company_id, starts_at) do update set locked_until = excluded.locked_until\nwhere slot_locks.locked_until < now()\nreturning company_id",
+        "options": {
+          "queryReplacement": "={{ [$json.conversation_id, $json.starts_at] }}"
+        }
+      },
+      "id": "c7d2a1e2-0028-4000-8000-000000000003",
+      "name": "Lock slot",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c28b4",
+              "leftValue": "={{ !!$json.company_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e2-0028-4000-8000-000000000004",
+      "name": "Slot locked",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "id": "c7d2a1e2-0028-4000-8000-000000000005",
+      "name": "Book in CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmAdapter0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "book_appointment",
+            "data": "={{ { starts_at: $('Appointment').item.json.starts_at, ends_at: $('Appointment').item.json.ends_at, name: $('Appointment').item.json.name, description: $('Appointment').item.json.description } }}"
+          },
+          "matchingColumns": [
+            "operation",
+            "data"
+          ],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Запись поставлена — в Postgres: её id в CRM нужен записи Заявки (привязать к Клиенту и Автомобилю).\n-- Блокировка снята в любом случае: дальше слот держит сама Запись в CRM.\nwith unlocked as (\n  delete from slot_locks where company_id = $1::uuid and starts_at = $2::timestamp at time zone 'UTC'\n),\nsaved as (\n  insert into appointments (company_id, lead_id, starts_at, ends_at, crm_meeting_id)\n  select l.company_id, l.id, $2::timestamp at time zone 'UTC', $3::timestamp at time zone 'UTC', $4\n  from leads l\n  where l.conversation_id = $5::uuid and $6::boolean\n)\nselect $6::boolean as booked, nullif($4, '') as crm_meeting_id",
+        "options": {
+          "queryReplacement": "={{ [$('Lock slot').item.json.company_id, $('Appointment').item.json.starts_at, $('Appointment').item.json.ends_at, $json.crm_meeting_id, $('Appointment').item.json.conversation_id, $json.booked] }}"
+        }
+      },
+      "id": "c7d2a1e2-0028-4000-8000-000000000006",
+      "name": "Save appointment",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "booked",
+              "value": "={{ false }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2a1e2-0028-4000-8000-000000000007",
+      "name": "Slot busy",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Appointment to book": {
+      "main": [
+        [
+          {
+            "node": "Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appointment": {
+      "main": [
+        [
+          {
+            "node": "Lock slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lock slot": {
+      "main": [
+        [
+          {
+            "node": "Slot locked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slot locked": {
+      "main": [
+        [
+          {
+            "node": "Book in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slot busy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Book in CRM": {
+      "main": [
+        [
+          {
+            "node": "Save appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

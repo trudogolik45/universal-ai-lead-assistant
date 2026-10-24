@@ -1,0 +1,18 @@
+{
+    "fields": {
+        "marketingConsent": "Zgoda marketingowa",
+        "conversations": "Rozmowy",
+        "vehicles": "Pojazdy",
+        "leads": "Zgłoszenia",
+        "repairOrders": "Zlecenia naprawy"
+    },
+    "links": {
+        "conversations": "Rozmowy",
+        "vehicles": "Pojazdy",
+        "leads": "Zgłoszenia",
+        "repairOrders": "Zlecenia naprawy"
+    },
+    "tooltips": {
+        "marketingConsent": "Klient zgodził się na przypomnienia o przeglądach i sezonowej wymianie opon. Bez zgody takie wiadomości nie są wysyłane."
+    }
+}

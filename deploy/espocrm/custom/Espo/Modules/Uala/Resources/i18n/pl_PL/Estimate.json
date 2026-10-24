@@ -1,0 +1,24 @@
+{
+    "fields": {
+        "status": "Status",
+        "amount": "Kwota",
+        "repairOrder": "Zlecenie naprawy"
+    },
+    "links": {
+        "repairOrder": "Zlecenie naprawy"
+    },
+    "options": {
+        "status": {
+            "Draft": "Szkic",
+            "Ready": "Gotowy",
+            "Accepted": "Zaakceptowany",
+            "Rejected": "Odrzucony"
+        }
+    },
+    "tooltips": {
+        "status": "Gotowy — kosztorys sam trafia do klienta (WhatsApp lub SMS); gdy klient milczy, dostaje dwa przypomnienia, potem administrator dostaje zadanie. Zaakceptowany, Odrzucony lub Szkic zatrzymują przypomnienia."
+    },
+    "labels": {
+        "Create Estimate": "Utwórz kosztorys"
+    }
+}

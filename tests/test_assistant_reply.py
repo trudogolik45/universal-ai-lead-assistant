@@ -3,8 +3,11 @@ import uuid
 
 import pytest
 
+from tests import knowledge
 from tests.factories import create_company, create_lead, open_conversation
 from tests.fake_server import Response
+from tests.knowledge import knowledge_item
+from tests.marketing import CONSENT_QUESTION
 from tests.meta import MetaClient, messenger_payload
 from tests.openrouter import assistant_reply, completion_requests, raw_reply, respond_with
 from tests.polling import eventually, stays
@@ -26,17 +29,13 @@ def meta(n8n_url):
 
 
 @pytest.fixture
-def company(db):
+def company(db, fake):
     company_id = create_company(db, "Assistant Co")
     db.execute(
         "update companies set messenger_page_id = %s, ai_model = 'test/model-x' where id = %s",
         (PAGE_ID, company_id),
     )
-    db.execute(
-        "insert into knowledge_items (company_id, kind, title, body, price)"
-        " values (%s, 'service', 'Montaż mebli', 'Skręcanie mebli z paczek.', 120)",
-        (company_id,),
-    )
+    knowledge.respond_with(fake, [knowledge_item("Montaż mebli", description="Skręcanie mebli z paczek.", price=120)])
     return company_id
 
 
@@ -93,11 +92,13 @@ def test_full_lead_in_one_message_is_qualified_and_answered(db, fake, meta, clie
     eventually(lambda: sent_messages(fake))
     assert lead(db) == ("qualified", *FULL_LEAD.values(), "booking", [])
     assert conversation_language(db) == "pl"
-    assert outgoing_texts(db) == ["Dziękuję, właściciel potwierdzi termin."]
+    # Заявка собрана — к ответу один раз добавлен вопрос о Согласии на рекламу (#33).
+    answer = f"Dziękuję, właściciel potwierdzi termin.\n\n{CONSENT_QUESTION['pl']}"
+    assert outgoing_texts(db) == [answer]
     assert sent_messages(fake) == [{
         "recipient": {"id": client},
         "messaging_type": "RESPONSE",
-        "message": {"text": "Dziękuję, właściciel potwierdzi termin."},
+        "message": {"text": answer},
     }]
 
 
@@ -172,6 +173,8 @@ def test_intent_follows_client_when_topic_changes(db, fake, meta, client):
     ("pl", "Ile kosztuje montaż?", "Montaż kosztuje 120 zł za godzinę."),
     ("en", "How much is furniture assembly?", "Assembly costs 120 PLN per hour."),
     ("ru", "Сколько стоит сборка мебели?", "Сборка стоит 120 злотых в час."),
+    ("de", "Was kostet die Möbelmontage?", "Die Montage kostet 120 PLN pro Stunde."),
+    ("uk", "Скільки коштує збирання меблів?", "Збирання коштує 120 злотих на годину."),
 ])
 def test_reply_goes_out_in_client_language(db, fake, meta, client, language, text, reply):
     respond_with(fake, assistant_reply(reply=reply, language=language, intent="price"))
@@ -181,6 +184,30 @@ def test_reply_goes_out_in_client_language(db, fake, meta, client, language, tex
     eventually(lambda: sent_messages(fake))
     assert sent_messages(fake)[0]["message"]["text"] == reply
     assert conversation_language(db) == language
+
+
+def test_assistant_may_answer_in_any_european_language(db, fake, meta, client):
+    respond_with(fake, assistant_reply())
+
+    meta.post(messenger_payload(PAGE_ID, client, "Dobrý den"))
+
+    request = eventually(lambda: completion_requests(fake))[0]
+    language = request["response_format"]["json_schema"]["schema"]["properties"]["language"]
+    assert {"pl", "en", "ru", "de", "uk", "fr", "cs", "lt"} <= set(language["enum"])
+    system = request["messages"][0]["content"]
+    assert "(pl, en or ru)" not in system
+    assert "handoff_reason is a short reason in Polish" in system
+
+
+def test_undetected_language_falls_back_to_company_default(db, fake, meta, client, company):
+    db.execute("update companies set default_language = 'en' where id = %s", (company,))
+    respond_with(fake, assistant_reply(reply="Hello! How can I help?", language=None))
+
+    meta.post(messenger_payload(PAGE_ID, client, "Saluton"))
+
+    eventually(lambda: sent_messages(fake))
+    assert sent_messages(fake)[0]["message"]["text"] == "Hello! How can I help?"
+    assert conversation_language(db) == "en"
 
 
 def test_qualified_from_ai_without_required_field_stays_collecting(db, fake, meta, client):
@@ -194,6 +221,41 @@ def test_qualified_from_ai_without_required_field_stays_collecting(db, fake, met
     eventually(lambda: sent_messages(fake))
     assert lead(db)[0] == "collecting"
     assert lead(db)[-1] == ["contact"]
+
+
+AUTO_SERVICE_FIELDS = ["name", "phone", "vehicle_brand", "vehicle_model", "description", "desired_date"]
+
+
+def test_auto_service_lead_is_qualified_only_with_fields_set_by_company(db, fake, meta, client, company):
+    db.execute("update companies set required_fields = %s where id = %s", (AUTO_SERVICE_FIELDS, company))
+    respond_with(fake, assistant_reply(
+        lead_data={
+            "name": "Jan Kowalski",
+            "phone": "+48600123456",
+            "vehicle_brand": "Skoda",
+            "description": "Stuki w zawieszeniu",
+            "desired_date": "jutro po 16:00",
+        },
+        qualified=True,
+    ))
+
+    meta.post(messenger_payload(PAGE_ID, client, "Jan Kowalski, +48600123456, Skoda stuka, jutro po 16"))
+
+    eventually(lambda: sent_messages(fake))
+    system = completion_requests(fake)[0]["messages"][0]["content"]
+    assert "Required lead fields: name, phone, vehicle_brand, vehicle_model, description, desired_date" in system
+    assert db.execute("select status, missing_fields, phone, vehicle_brand from leads").fetchone() == (
+        "collecting", ["vehicle_model"], "+48600123456", "Skoda",
+    )
+
+
+def test_lead_is_collected_in_polish_whatever_client_language(db, fake, meta, client):
+    respond_with(fake, assistant_reply(language="de"))
+
+    meta.post(messenger_payload(PAGE_ID, client, "Mein Auto klopft beim Bremsen"))
+
+    system = eventually(lambda: completion_requests(fake))[0]["messages"][0]["content"]
+    assert "write service, description and desired_date in Polish whatever the client's language" in system
 
 
 def test_message_in_handoff_conversation_is_saved_without_ai(db, fake, meta, client, company):

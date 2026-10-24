@@ -1,0 +1,282 @@
+{
+  "id": "uala0employeeRpl",
+  "name": "Employee reply from CRM",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "8b3f2d10-0000-4000-8000-000000000001",
+      "name": "Employee message",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "8b3f2d10-0000-4000-8000-0000000000a1",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "employee-reply",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "8b3f2d10-0000-4000-8000-000000000002",
+      "name": "Secret valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$env.N8N_HOOK_SECRET && $json.headers['x-uala-secret'] === $env.N8N_HOOK_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8b3f2d10-0000-4000-8000-000000000003",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        200
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "8b3f2d10-0000-4000-8000-000000000004",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        400
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "8b3f2d10-0000-4000-8000-000000000005",
+      "name": "Hand conversation to employee",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Сотрудник ответил в Беседе CRM: активная Беседа Клиента в Канале переходит в режим человека\n-- (Ассистент в ней молчит), Сообщение сотрудника ложится в историю с id записи CRM — retry\n-- не пишет его в CRM второй раз. company — Заказчик этой CRM: Клиент мог писать и другим Заказчикам. Повтор того же Сообщения CRM Клиенту не уходит: строки нет.\nwith conversation as (\n  update conversations set status = 'handoff'\n  where id = (select id from conversations\n              where channel = $1 and sender_id = $2 and status in ('open', 'handoff')\n                and ($5 = '' or company_id = (select id from companies where slug = $5))\n              order by last_message_at desc limit 1)\n    and not exists (select 1 from messages where crm_message_id = $4)\n  returning id, company_id\n),\nmessage as (\n  insert into messages (company_id, conversation_id, direction, text, crm_message_id)\n  select company_id, id, 'out', $3, $4 from conversation\n)\nselect id as conversation_id, $3 as text from conversation",
+        "options": {
+          "queryReplacement": "={{ [$json.body.channel, $json.body.sender_id, $json.body.text, $json.body.crm_message_id, $json.body.company || ''] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "8b3f2d10-0000-4000-8000-000000000006",
+      "name": "Conversation found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$json.conversation_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8b3f2d10-0000-4000-8000-000000000007",
+      "name": "Send to client",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0sendClient0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $json.conversation_id }}",
+            "text": "={{ $json.text }}",
+            "retry": "={{ true }}"
+          },
+          "matchingColumns": [
+            "conversation_id",
+            "text",
+            "retry"
+          ],
+          "schema": [
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "retry",
+              "displayName": "retry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Employee message": {
+      "main": [
+        [
+          {
+            "node": "Secret valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Secret valid": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200": {
+      "main": [
+        [
+          {
+            "node": "Hand conversation to employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hand conversation to employee": {
+      "main": [
+        [
+          {
+            "node": "Conversation found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation found": {
+      "main": [
+        [
+          {
+            "node": "Send to client",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  }
+}

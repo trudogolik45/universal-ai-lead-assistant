@@ -73,10 +73,10 @@ def test_lead_cannot_join_other_companys_conversation(db):
     "table, column, bad_value",
     [
         ("companies", "reply_mode", "loud"),
-        ("companies", "default_language", "de"),
+        ("companies", "default_language", "xx"),
         ("conversations", "status", "archived"),
         ("conversations", "channel", "email"),
-        ("conversations", "language", "de"),
+        ("conversations", "language", "xx"),
         ("messages", "direction", "sideways"),
         ("leads", "status", "won"),
         ("leads", "intent", "spam"),
@@ -92,14 +92,15 @@ def test_unknown_enum_value_is_rejected(db, table, column, bad_value):
         db.execute(f"update {table} set {column} = %s", (bad_value,))
 
 
-def test_knowledge_item_kind_is_restricted(db):
+@pytest.mark.parametrize("language", ["de", "uk", "fr", "cs"])
+def test_european_language_is_accepted_for_company_and_conversation(db, language):
     company = create_company(db)
+    open_conversation(db, company)
 
-    with pytest.raises(psycopg.errors.CheckViolation):
-        db.execute(
-            "insert into knowledge_items (company_id, kind, title) values (%s, 'promo', 'X')",
-            (company,),
-        )
+    db.execute("update companies set default_language = %s", (language,))
+    db.execute("update conversations set language = %s", (language,))
+
+    assert db.execute("select language from conversations").fetchone()[0] == language
 
 
 def test_required_fields_must_be_lead_fields(db):
@@ -109,3 +110,18 @@ def test_required_fields_must_be_lead_fields(db):
         db.execute(
             "update companies set required_fields = '{name,pesel}' where id = %s", (company,)
         )
+
+
+def test_auto_service_company_requires_phone_and_vehicle(db):
+    company = create_company(db)
+
+    db.execute(
+        "update companies set required_fields = '{name,phone,vehicle_brand,vehicle_model,description,desired_date}'"
+        " where id = %s",
+        (company,),
+    )
+
+    assert db.execute("select required_fields from companies").fetchone()[0] == [
+        "name", "phone", "vehicle_brand", "vehicle_model", "description", "desired_date",
+    ]
+

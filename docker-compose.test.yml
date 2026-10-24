@@ -2,6 +2,19 @@
 # Поднимает и импортирует workflow фикстура tests/stand.py, руками — см. README.
 # Порты хоста случайные (0): параллельные стенды не пересекаются, адрес узнаём через `docker compose port`.
 # Имя проекта — COMPOSE_PROJECT_NAME (фикстура задаёт своё на каждый checkout).
+# EspoCRM (образ deploy/espocrm, как в проде) поднимает только фикстура `espocrm`: база `espocrm`
+# в том же Postgres, установка с нуля на каждый прогон. Имя образа не задано: compose называет его
+# по проекту, и стенды разных checkout'ов не перетирают модуль друг другу.
+
+x-espocrm: &espocrm
+  build: deploy/espocrm
+  # Daemon и WebSocket выходят, если основной контейнер ещё не готов.
+  restart: unless-stopped
+  volumes_from:
+    - espocrm
+  depends_on:
+    espocrm:
+      condition: service_healthy
 
 services:
   postgres:
@@ -13,7 +26,9 @@ services:
     ports:
       - "127.0.0.1:${STAND_POSTGRES_PORT:-0}:5432"
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "test"]
+      # По TCP: на время initdb образ поднимает временный сервер только на unix-сокете,
+      # проверка через сокет зеленеет раньше, чем Postgres готов принимать соединения с хоста.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "test"]
       interval: 1s
       retries: 30
 
@@ -24,6 +39,9 @@ services:
       NODE_FUNCTION_ALLOW_BUILTIN: crypto
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
+      # Под нагрузкой (параллельные стенды) task runner стартует дольше 30 с по умолчанию,
+      # не подключается к брокеру, и Code-узлы падают по таймауту.
+      N8N_RUNNERS_GRANT_TOKEN_TTL: "300"
       GENERIC_TIMEZONE: Europe/Warsaw
       # Ключ фиксирован: стенд одноразовый, credentials тестовые.
       N8N_ENCRYPTION_KEY: test-stand-encryption-key
@@ -33,21 +51,39 @@ services:
       META_APP_SECRET: test-app-secret
       META_VERIFY_TOKEN: test-verify-token
       META_PAGE_ACCESS_TOKEN: test-page-token
+      WHATSAPP_ACCESS_TOKEN: test-whatsapp-token
+      INSTAGRAM_ACCESS_TOKEN: test-instagram-token
       OPENROUTER_API_KEY: test-openrouter-key
       TELEGRAM_BOT_TOKEN: test-telegram-token
-      TELEGRAM_WEBHOOK_SECRET: test-telegram-webhook-secret
+      # Группа разработчиков для алерта «AI не отвечает».
+      ALERT_TELEGRAM_CHAT_ID: "-1009990000000"
       RETRY_WEBHOOK_SECRET: test-retry-secret
-      # Расписание retry в тестах не срабатывает (1 января): прогоны только по вебхуку.
+      ESPOCRM_API_KEY: test-espocrm-key
+      N8N_HOOK_SECRET: test-n8n-hook-secret
+      REPORT_WEBHOOK_SECRET: test-report-secret
+      # Отчёты владельцу: письма уходят в Mailpit стенда, он принимает любой логин.
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_SECURE: "false"
+      SMTP_USER: test-smtp-user
+      SMTP_PASSWORD: test-smtp-password
+      SMTP_FROM: raporty@uala.test
+      OWNER_REPORT_EMAIL: wlasciciel@autopro.test
+      # Отчёты по расписанию в тестах не срабатывают (1 января): прогоны только по вебхуку.
+      REPORT_DAILY_CRON: "0 0 1 1 *"
+      REPORT_WEEKLY_CRON: "0 0 1 1 *"
+      SMSAPI_TOKEN: test-smsapi-token
+      # Расписания retry и напоминаний в тестах не срабатывают (1 января): прогоны только по вебхуку.
       RETRY_SCHEDULE_CRON: ${RETRY_SCHEDULE_CRON:-0 0 1 1 *}
-      # Service account: ключ генерирует фикстура n8n_url (tests/google.py).
-      GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
-      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:-}
+      REMINDER_SCHEDULE_CRON: ${REMINDER_SCHEDULE_CRON:-0 0 1 1 *}
+      MARKETING_SCHEDULE_CRON: ${MARKETING_SCHEDULE_CRON:-0 0 1 1 *}
+      ESTIMATE_SCHEDULE_CRON: ${ESTIMATE_SCHEDULE_CRON:-0 0 1 1 *}
       # Внешние API — фейк-сервер pytest на хосте (tests/fake_server.py).
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-http://host.docker.internal:9/openrouter}
       META_GRAPH_BASE_URL: ${META_GRAPH_BASE_URL:-http://host.docker.internal:9/meta}
       TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-http://host.docker.internal:9/telegram}
-      GOOGLE_SHEETS_BASE_URL: ${GOOGLE_SHEETS_BASE_URL:-http://host.docker.internal:9/sheets}
-      GOOGLE_OAUTH_BASE_URL: ${GOOGLE_OAUTH_BASE_URL:-http://host.docker.internal:9/google-oauth}
+      ESPOCRM_BASE_URL: ${ESPOCRM_BASE_URL:-http://host.docker.internal:9/espocrm}
+      SMSAPI_BASE_URL: ${SMSAPI_BASE_URL:-http://host.docker.internal:9/smsapi}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -55,3 +91,69 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  # SMTP-сервер для писем n8n: принимает всё, ничего не отправляет, письма читаются через его API.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:${STAND_MAILPIT_PORT:-0}:8025"
+
+  espocrm:
+    build: deploy/espocrm
+    environment:
+      ESPOCRM_DATABASE_PLATFORM: Postgresql
+      ESPOCRM_DATABASE_HOST: postgres
+      ESPOCRM_DATABASE_PORT: "5432"
+      ESPOCRM_DATABASE_NAME: espocrm
+      ESPOCRM_DATABASE_USER: test
+      ESPOCRM_DATABASE_PASSWORD: test
+      ESPOCRM_ADMIN_USERNAME: admin
+      ESPOCRM_ADMIN_PASSWORD: test-espocrm-admin
+      ESPOCRM_SITE_URL: http://localhost
+      ESPOCRM_LANGUAGE: pl_PL
+      ESPOCRM_TIME_ZONE: Europe/Warsaw
+      # WebSocket: сервер в espocrm-websocket, адрес для браузера стенду не нужен.
+      ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: tcp://*:7777
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: tcp://espocrm-websocket:7777
+      # Ответ сотрудника, закрытая Задача, статус Заказ-наряда и Сметы (хуки модуля Uala): контрактные
+      # тесты подставляют фейк-сервер.
+      ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_URL: ${EMPLOYEE_REPLY_URL:-http://n8n:5678/webhook/employee-reply}
+      ESPOCRM_CONFIG_UALA_TASK_DONE_URL: ${TASK_DONE_URL:-http://n8n:5678/webhook/task-done}
+      ESPOCRM_CONFIG_UALA_REPAIR_STATUS_URL: ${REPAIR_STATUS_URL:-http://n8n:5678/webhook/repair-status}
+      ESPOCRM_CONFIG_UALA_ESTIMATE_URL: ${ESTIMATE_URL:-http://n8n:5678/webhook/estimate}
+      ESPOCRM_CONFIG_UALA_N8N_HOOK_SECRET: test-n8n-hook-secret
+      # Повтор вызова n8n: в проде пауза 60 с × номер попытки, в стенде — секунда.
+      ESPOCRM_CONFIG_UALA_N8N_RETRY_DELAY: "1"
+      ESPOCRM_CONFIG_UALA_COMPANY: autopro-service
+    volumes:
+      - /var/www/html/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${STAND_ESPOCRM_PORT:-0}:80"
+    # Apache стартует после установки: до неё app-check уже проходит, а API ещё нет.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/"]
+      interval: 2s
+      retries: 150
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  espocrm-daemon:
+    <<: *espocrm
+    entrypoint: docker-daemon.sh
+
+  espocrm-websocket:
+    <<: *espocrm
+    entrypoint: docker-websocket.sh
+    ports:
+      - "127.0.0.1:${STAND_ESPOCRM_WEBSOCKET_PORT:-0}:8080"

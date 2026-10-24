@@ -1,0 +1,28 @@
+{
+    "fields": {
+        "service": "Service",
+        "desiredTime": "Preferred time",
+        "contact": "Client",
+        "vehicle": "Vehicle",
+        "conversation": "Conversation",
+        "channel": "Channel"
+    },
+    "links": {
+        "contact": "Client",
+        "vehicle": "Vehicle",
+        "conversation": "Conversation"
+    },
+    "tooltips": {
+        "desiredTime": "Time the client asked for. It is not a confirmed appointment.",
+        "channel": "Where the client came from. The assistant fills it in; for walk-in or phone requests choose it by hand. Counted in the owner reports."
+    },
+    "options": {
+        "channel": {
+            "": "",
+            "messenger": "Messenger",
+            "instagram": "Instagram",
+            "whatsapp": "WhatsApp",
+            "call": "Phone"
+        }
+    }
+}

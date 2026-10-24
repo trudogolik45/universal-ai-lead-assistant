@@ -1,4 +1,4 @@
-"""Тестовый стенд: docker-compose.test.yml (Postgres + n8n), импорт workflow и credentials.
+"""Тестовый стенд: docker-compose.test.yml (Postgres, n8n, Mailpit, EspoCRM), импорт workflow и credentials.
 
 Порядок: Postgres → миграции (фикстура `database_url`) → n8n с базовыми URL фейк-сервера →
 scripts.n8n_sync.push, как в проде: credentials, импорт и публикация всех n8n/workflows/*.json,
@@ -14,8 +14,12 @@ import time
 from pathlib import Path
 
 import httpx
+import psycopg
 
+from scripts.espocrm import EspoCrm
+from scripts.espocrm_bootstrap import bootstrap
 from scripts.n8n_sync import WORKFLOWS_DIR, push
+from tests.espocrm import ESPOCRM_ADMIN, EspoCrmStand
 
 ROOT = Path(__file__).resolve().parent.parent
 COMPOSE_FILE = ROOT / "docker-compose.test.yml"
@@ -24,6 +28,13 @@ COMPOSE_FILE = ROOT / "docker-compose.test.yml"
 PG_AUTH = "test:test"
 # Метод пробы регистрации вебхуков: в workflow его не используем.
 PROBE_METHOD = "PUT"
+# EspoCRM: своя база в Postgres стенда, основной контейнер, cron-задачи и WebSocket.
+ESPOCRM_DATABASE = "espocrm"
+ESPOCRM_SERVICES = ("espocrm", "espocrm-daemon", "espocrm-websocket")
+# Почта EspoCRM стенда — Mailpit без TLS и логина, как SMTP n8n стенда.
+STAND_SMTP = {"emailAddress": "crm@autopro.test", "smtpHost": "mailpit", "smtpPort": 1025, "smtpSecurity": "",
+              "smtpAuth": False}
+STAND_SMTP_ADDRESS = "mailpit:1025"
 
 
 def docker_available() -> bool:
@@ -60,7 +71,9 @@ class Stand:
 
     def up_postgres(self) -> str:
         self.compose("up", "-d", "--wait", "postgres")
-        return f"postgresql://{PG_AUTH}@{self.host_url('postgres', 5432)}/test"
+        url = f"postgresql://{PG_AUTH}@{self.host_url('postgres', 5432)}/test"
+        wait_until(lambda: accepts_connections(url), f"Postgres {url}")
+        return url
 
     def up_n8n(self, env: dict[str, str]) -> str:
         """Поднимает n8n с env (базовые URL внешних API, ключи) и публикует все workflow. Возвращает URL n8n."""
@@ -72,6 +85,34 @@ class Stand:
         wait_ready(url)
         wait_webhooks(url)
         return url
+
+    def up_espocrm(self, env: dict[str, str]) -> EspoCrmStand:
+        """EspoCRM с нуля: пустая база `espocrm` в Postgres стенда, установка, группы сотрудников, API-пользователь n8n.
+        env — подстановки docker-compose.test.yml (адрес вебхука ответа сотрудника)."""
+        self.env.update(env)
+        recreate_database(self.up_postgres(), ESPOCRM_DATABASE)
+        self.compose("up", "-d", "--build", "--force-recreate", "--renew-anon-volumes", "--wait", *ESPOCRM_SERVICES)
+        url = f"http://{self.host_url('espocrm', 80)}"
+        admin = EspoCrm(url, admin=ESPOCRM_ADMIN)
+        # Healthcheck смотрит статику; первый запрос к API собирает кэш и под нагрузкой идёт долго.
+        wait_until(lambda: admin.http.get("App/user").status_code == 200, f"API EspoCRM {url}", timeout=300)
+        wait_until(self.allow_mailpit_smtp, "Mailpit в emailServerAllowedAddressList EspoCRM")
+        api = EspoCrm(url, api_key=bootstrap(admin, STAND_SMTP))
+        return EspoCrmStand(url, admin, api, websocket=self.host_url("espocrm-websocket", 8080))
+
+    def allow_mailpit_smtp(self) -> bool:
+        """Mailpit — внутренний адрес: SMTP на него EspoCRM пускает только по списку (в проде ящик внешний).
+        Список — массив, через env его не задать. Daemon и WebSocket на старте сами переписывают config
+        EspoCRM и могут затереть параметр: ставим и проверяем, пока он не удержится."""
+        command = ("exec", "-T", "--user", "www-data", "espocrm", "bin/command")
+        self.compose(*command, "config:set", "emailServerAllowedAddressList", json.dumps([STAND_SMTP_ADDRESS]),
+                     "--type=json")
+        time.sleep(3)
+        return STAND_SMTP_ADDRESS in self.compose(*command, "config:get", "emailServerAllowedAddressList")
+
+    def mailpit_url(self) -> str:
+        """API Mailpit: письма, которые n8n отправил по SMTP. Поднимается вместе с n8n."""
+        return f"http://{self.host_url('mailpit', 8025)}"
 
     def n8n_url(self) -> str:
         # Спрашивать после каждого (пере)запуска: случайный порт хоста меняется.
@@ -88,22 +129,36 @@ class Stand:
         self.compose("down", "-v", "--remove-orphans")
 
 
+def accepts_connections(url: str) -> bool:
+    """pg_isready проходит и на временном сервере initdb, который TCP не слушает."""
+    with psycopg.connect(url, connect_timeout=2):
+        return True
+
+
+def recreate_database(url: str, name: str) -> None:
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute(f"drop database if exists {name} with (force)")
+        conn.execute(f"create database {name}")
+
+
 def wait_until(probe, what: str, timeout: float = 90):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             if probe():
                 return
-        except httpx.TransportError:
+        except (httpx.TransportError, psycopg.OperationalError):
             pass
         time.sleep(0.5)
     raise TimeoutError(f"не дождались за {timeout} с: {what}")
 
 
 def wait_ready(url: str):
+    # Первый старт n8n — миграции его базы; рядом с другими стендами (load ~20) они шли до 4+ минут.
     wait_until(
         lambda: httpx.get(f"{url}/healthz/readiness", timeout=2).status_code == 200,
         f"n8n {url}",
+        timeout=600,
     )
 
 

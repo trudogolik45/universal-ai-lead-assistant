@@ -1,0 +1,742 @@
+{
+  "id": "uala0estimates00",
+  "name": "Estimates",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "estimate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Estimate status changed",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "id": "e5710000-0000-4000-8000-000000000001",
+      "webhookId": "e5710000-0000-4000-8000-0000000000a1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$env.N8N_HOOK_SECRET && $json.headers['x-uala-secret'] === $env.N8N_HOOK_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Secret valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        300
+      ],
+      "id": "e5710000-0000-4000-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        200
+      ],
+      "id": "e5710000-0000-4000-8000-000000000003"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        400
+      ],
+      "id": "e5710000-0000-4000-8000-000000000004"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('Estimate status changed').first().json.body.status === 'Ready' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Estimate ready",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        200
+      ],
+      "id": "e5710000-0000-4000-8000-000000000005"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Готовая Смета уходит в Беседу, где Клиент писал последним (как статус ремонта): Клиент писал\n-- и в Messenger, и в WhatsApp — одно сообщение, а не два. Беседы нет в буфере — сообщать некуда.\n-- Смету поправили и снова отметили готовой — цепочка начинается заново с новой Сметы.\nwith client as (\n  select v.id, v.company_id\n  from conversations v\n  join jsonb_to_recordset($2::jsonb) as c(channel text, sender_id text)\n    on c.channel = v.channel and c.sender_id = v.sender_id\n  -- Только Заказчик этой CRM: тот же Клиент WhatsApp мог писать и другим Заказчикам.\n  where $7 = '' or v.company_id = (select id from companies where slug = $7)\n  order by v.last_message_at desc\n  limit 1\n),\nrestart as (\n  delete from estimate_steps where crm_estimate_id = $1\n)\ninsert into estimates (crm_estimate_id, company_id, conversation_id, crm_repair_order_id, name, amount, currency)\nselect $1, company_id, id, $3, $4, $5::numeric, $6 from client\non conflict (crm_estimate_id) do update set\n  company_id = excluded.company_id, conversation_id = excluded.conversation_id,\n  crm_repair_order_id = excluded.crm_repair_order_id, name = excluded.name,\n  amount = excluded.amount, currency = excluded.currency, ready_at = now(), stopped_at = null\nreturning crm_estimate_id",
+        "options": {
+          "queryReplacement": "={{ [$('Estimate status changed').first().json.body.crm_estimate_id, JSON.stringify($('Estimate status changed').first().json.body.conversations || []), $('Estimate status changed').first().json.body.crm_repair_order_id, $('Estimate status changed').first().json.body.name, $('Estimate status changed').first().json.body.amount, $('Estimate status changed').first().json.body.currency, $('Estimate status changed').first().json.body.company || ''] }}"
+        }
+      },
+      "name": "Save estimate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        100
+      ],
+      "id": "e5710000-0000-4000-8000-000000000006",
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Сотрудник сменил статус готовой Сметы (Клиент принял, отказался, Смету правят) — уточнений больше нет.\nupdate estimates set stopped_at = now()\nwhere crm_estimate_id = $1 and stopped_at is null",
+        "options": {
+          "queryReplacement": "={{ [$('Estimate status changed').first().json.body.crm_estimate_id] }}"
+        }
+      },
+      "name": "Stop chain",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        300
+      ],
+      "id": "e5710000-0000-4000-8000-000000000007",
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "={{ $env.ESTIMATE_SCHEDULE_CRON || '0 9-18 * * 1-6' }}"
+            }
+          ]
+        }
+      },
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        600
+      ],
+      "id": "e5710000-0000-4000-8000-000000000008"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "estimates",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Run now",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        800
+      ],
+      "id": "e5710000-0000-4000-8000-000000000009",
+      "webhookId": "e5710000-0000-4000-8000-0000000000a2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$env.RETRY_WEBHOOK_SECRET && $json.headers['x-retry-secret'] === $env.RETRY_WEBHOOK_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Run secret valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        800
+      ],
+      "id": "e5710000-0000-4000-8000-000000000010"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Run respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        700
+      ],
+      "id": "e5710000-0000-4000-8000-000000000011"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "name": "Run respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        440,
+        900
+      ],
+      "id": "e5710000-0000-4000-8000-000000000012"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Цепочка Сметы по шагам: Смета уходит Клиенту сразу, уточнение — через сутки, второе — ещё через\n-- двое суток, ещё через двое — Задача человеку «Клиент молчит». Шаг — только после предыдущего.\n-- Цепочка стоит, если сотрудник сменил статус Сметы или Клиент написал в Канал Беседы после Сметы.\n-- Каждый шаг — один раз: строку ставит первый запуск, повтор берёт только несделанное, взятое больше\n-- 5 минут назад (отправка упала).\nwith steps (step, previous, pause) as (\n  values ('sent', null, interval '0'),\n    ('reminder_1', 'sent', interval '1 day'),\n    ('reminder_2', 'reminder_1', interval '2 days'),\n    ('silent_task', 'reminder_2', interval '2 days')\n),\ndue as (\n  select e.crm_estimate_id, s.step\n  from estimates e\n  join conversations v on v.id = e.conversation_id\n  cross join steps s\n  left join estimate_steps p on p.crm_estimate_id = e.crm_estimate_id and p.step = s.previous\n  left join estimate_steps sent on sent.crm_estimate_id = e.crm_estimate_id and sent.step = 'sent'\n  where e.stopped_at is null\n    and (s.previous is null or p.done_at <= now() - s.pause)\n    and not exists (\n      select 1 from estimate_steps d\n      where d.crm_estimate_id = e.crm_estimate_id and d.step = s.step and d.done_at is not null)\n    and not exists (\n      select 1 from messages m\n      join conversations c on c.id = m.conversation_id\n      where c.company_id = v.company_id and c.channel = v.channel and c.sender_id = v.sender_id\n        and m.direction = 'in' and m.created_at > sent.done_at)\n),\nclaimed as (\n  insert into estimate_steps (crm_estimate_id, step)\n  select crm_estimate_id, step from due\n  on conflict (crm_estimate_id, step) do update set claimed_at = now()\n  where estimate_steps.done_at is null and estimate_steps.claimed_at < now() - interval '5 minutes'\n  returning crm_estimate_id, step\n)\nselect c.crm_estimate_id, c.step, e.conversation_id, e.crm_repair_order_id, e.name,\n  e.amount::text as amount, e.currency, co.name as company,\n  coalesce(v.language, co.default_language) as language, v.channel, v.sender_id\nfrom claimed c\njoin estimates e on e.crm_estimate_id = c.crm_estimate_id\njoin conversations v on v.id = e.conversation_id\njoin companies co on co.id = e.company_id",
+        "options": {}
+      },
+      "name": "Claim due steps",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        600
+      ],
+      "id": "e5710000-0000-4000-8000-000000000013",
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Шаг цепочки Сметы. Смете и уточнениям — шаблоны WhatsApp «estimate_ready» и «estimate_reminder»,\n// одобренные у Meta на pl и en (docs/whatsapp-setup.md, параметры — название Сметы и сумма), текст SMS —\n// те же два языка. Последний шаг — Задача человеку на польском: её читают сотрудники Заказчика.\nconst TEMPLATES = { sent: 'estimate_ready', reminder_1: 'estimate_reminder', reminder_2: 'estimate_reminder' };\nconst TEXTS = {\n  estimate_ready: {\n    pl: (company, name, amount) => `${company}: kosztorys naprawy „${name}” jest gotowy: ${amount}. Odpisz nam, czy go akceptujesz.`,\n    en: (company, name, amount) => `${company}: the repair estimate \"${name}\" is ready: ${amount}. Please reply whether you accept it.`,\n  },\n  estimate_reminder: {\n    pl: (company, name, amount) => `${company}: przypominamy o kosztorysie naprawy „${name}”: ${amount}. Odpisz nam, czy go akceptujesz.`,\n    en: (company, name, amount) => `${company}: a reminder about the repair estimate \"${name}\": ${amount}. Please reply whether you accept it.`,\n  },\n};\nconst CHANNELS = { messenger: 'Messenger', instagram: 'Instagram', whatsapp: 'WhatsApp' };\n\nfunction money(amount, currency, language) {\n  const value = Number(amount).toFixed(2);\n  return `${language === 'pl' ? value.replace('.', ',') : value} ${currency}`;\n}\n\nfunction message(r) {\n  const language = r.language === 'pl' ? 'pl' : 'en';\n  const amount = money(r.amount, r.currency, language);\n  const template = TEMPLATES[r.step];\n  return {\n    text: TEXTS[template][language](r.company, r.name, amount),\n    template: { name: template, parameters: [r.name, amount] },\n  };\n}\n\nfunction silentTask(r) {\n  return {\n    task: {\n      kind: 'estimate_silent',\n      parent_type: 'RepairOrder',\n      parent_id: r.crm_repair_order_id,\n      name: `Klient milczy po kosztorysie: ${r.name}`,\n      description: [\n        `Kosztorys „${r.name}” (${money(r.amount, r.currency, 'pl')}) wysłany klientowi, dwa przypomnienia bez odpowiedzi.`,\n        'Skontaktuj się z klientem i ustaw status kosztorysu.',\n        `Kanał: ${CHANNELS[r.channel]} · ${r.sender_id}`,\n      ].join('\\n'),\n    },\n  };\n}\n\n// Postgres-узел без строк отдаёт один item без полей — делать нечего.\nreturn $input.all().filter((item) => item.json.step).map(({ json: r }) => ({\n  json: {\n    crm_estimate_id: r.crm_estimate_id,\n    step: r.step,\n    conversation_id: r.conversation_id,\n    ...(r.step === 'silent_task' ? silentTask(r) : message(r)),\n  },\n}));"
+      },
+      "name": "Step",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        600
+      ],
+      "id": "e5710000-0000-4000-8000-000000000014"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !$('Step').item.json.task }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Message to client",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        600
+      ],
+      "id": "e5710000-0000-4000-8000-000000000015"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0sendClient0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $('Step').item.json.conversation_id }}",
+            "text": "={{ $('Step').item.json.text }}",
+            "template": "={{ $('Step').item.json.template }}"
+          },
+          "matchingColumns": [
+            "conversation_id",
+            "text",
+            "template"
+          ],
+          "schema": [
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "template",
+              "displayName": "template",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "name": "Send to client",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1760,
+        400
+      ],
+      "id": "e5710000-0000-4000-8000-000000000016",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Шаг отмечен сделанным до отправки: Клиенту или в CRM не уйдёт второй раз, когда отметка\n-- упала после отправки. Не ушло — «Reopen step» открывает шаг снова, повтор — следующим запуском.\nupdate estimate_steps set done_at = now()\nwhere crm_estimate_id = $1 and step = $2",
+        "options": {
+          "queryReplacement": "={{ [$('Step').item.json.crm_estimate_id, $('Step').item.json.step] }}"
+        }
+      },
+      "name": "Mark step done",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2200,
+        600
+      ],
+      "id": "e5710000-0000-4000-8000-000000000017",
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmAdapter0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "create_task",
+            "data": "={{ $('Step').item.json.task }}"
+          },
+          "matchingColumns": [
+            "operation",
+            "data"
+          ],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "name": "Create silent client task",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1760,
+        500
+      ],
+      "id": "e5710000-0000-4000-8000-000000000019",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "270a5a7f-7478-444d-a7a9-c3b87c7cb9b4",
+      "name": "Respond saved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1100,
+        100
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "0d023471-3375-4615-9871-7af16f940b13",
+      "name": "Reopen step",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1980,
+        600
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Клиенту не ушло или задача не создалась: шаг снова не сделан, следующий запуск после\n-- 5 минут повторит его.\nupdate estimate_steps set done_at = null\nwhere crm_estimate_id = $1 and step = $2",
+        "options": {
+          "queryReplacement": "={{ [$('Step').item.json.crm_estimate_id, $('Step').item.json.step] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Estimate status changed": {
+      "main": [
+        [
+          {
+            "node": "Secret valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Secret valid": {
+      "main": [
+        [
+          {
+            "node": "Estimate ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200": {
+      "main": [
+        []
+      ]
+    },
+    "Estimate ready": {
+      "main": [
+        [
+          {
+            "node": "Save estimate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save estimate": {
+      "main": [
+        [
+          {
+            "node": "Respond saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every hour": {
+      "main": [
+        [
+          {
+            "node": "Claim due steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now": {
+      "main": [
+        [
+          {
+            "node": "Run secret valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run secret valid": {
+      "main": [
+        [
+          {
+            "node": "Run respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run respond 200": {
+      "main": [
+        [
+          {
+            "node": "Claim due steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim due steps": {
+      "main": [
+        [
+          {
+            "node": "Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step": {
+      "main": [
+        [
+          {
+            "node": "Mark step done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message to client": {
+      "main": [
+        [
+          {
+            "node": "Send to client",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create silent client task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to client": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Reopen step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create silent client task": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Reopen step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop chain": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond saved": {
+      "main": [
+        [
+          {
+            "node": "Claim due steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark step done": {
+      "main": [
+        [
+          {
+            "node": "Message to client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

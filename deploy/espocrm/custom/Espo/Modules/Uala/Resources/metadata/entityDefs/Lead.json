@@ -1,0 +1,52 @@
+{
+    "fields": {
+        "service": {
+            "type": "varchar",
+            "maxLength": 255
+        },
+        "desiredTime": {
+            "type": "varchar",
+            "maxLength": 255,
+            "tooltip": true
+        },
+        "contact": {
+            "type": "link"
+        },
+        "vehicle": {
+            "type": "link"
+        },
+        "conversation": {
+            "type": "link"
+        },
+        "channel": {
+            "type": "enum",
+            "options": [
+                "",
+                "messenger",
+                "instagram",
+                "whatsapp",
+                "call"
+            ],
+            "default": "",
+            "audited": true,
+            "tooltip": true
+        }
+    },
+    "links": {
+        "contact": {
+            "type": "belongsTo",
+            "entity": "Contact",
+            "foreign": "leads"
+        },
+        "vehicle": {
+            "type": "belongsTo",
+            "entity": "Vehicle",
+            "foreign": "leads"
+        },
+        "conversation": {
+            "type": "belongsTo",
+            "entity": "Conversation",
+            "foreign": "leads"
+        }
+    }
+}

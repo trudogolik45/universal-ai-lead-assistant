@@ -1,0 +1,30 @@
+{
+    "fields": {
+        "channel": "Channel",
+        "senderId": "Sender ID",
+        "contact": "Client",
+        "messages": "Messages",
+        "leads": "Leads",
+        "lastMessageAt": "Last message"
+    },
+    "links": {
+        "contact": "Client",
+        "messages": "Messages",
+        "leads": "Leads",
+        "tasks": "Tasks"
+    },
+    "options": {
+        "channel": {
+            "messenger": "Messenger",
+            "instagram": "Instagram",
+            "whatsapp": "WhatsApp",
+            "call": "Call"
+        }
+    },
+    "tooltips": {
+        "senderId": "Client ID in the channel: PSID in Messenger, IGSID in Instagram, phone number in WhatsApp."
+    },
+    "labels": {
+        "Create Conversation": "Create Conversation"
+    }
+}

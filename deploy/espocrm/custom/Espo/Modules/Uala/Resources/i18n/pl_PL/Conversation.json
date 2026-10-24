@@ -1,0 +1,30 @@
+{
+    "fields": {
+        "channel": "Kanał",
+        "senderId": "ID nadawcy",
+        "contact": "Klient",
+        "messages": "Wiadomości",
+        "leads": "Zgłoszenia",
+        "lastMessageAt": "Ostatnia wiadomość"
+    },
+    "links": {
+        "contact": "Klient",
+        "messages": "Wiadomości",
+        "leads": "Zgłoszenia",
+        "tasks": "Zadania"
+    },
+    "options": {
+        "channel": {
+            "messenger": "Messenger",
+            "instagram": "Instagram",
+            "whatsapp": "WhatsApp",
+            "call": "Telefon"
+        }
+    },
+    "tooltips": {
+        "senderId": "Identyfikator klienta w kanale: PSID w Messengerze, IGSID w Instagramie, numer telefonu w WhatsAppie."
+    },
+    "labels": {
+        "Create Conversation": "Utwórz rozmowę"
+    }
+}

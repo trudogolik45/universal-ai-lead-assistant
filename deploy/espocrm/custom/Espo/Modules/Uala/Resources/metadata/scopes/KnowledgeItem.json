@@ -1,0 +1,14 @@
+{
+    "entity": true,
+    "object": true,
+    "layouts": true,
+    "tab": true,
+    "acl": true,
+    "aclPortal": false,
+    "customizable": true,
+    "importable": true,
+    "notifications": false,
+    "stream": false,
+    "type": "Base",
+    "module": "Uala"
+}

@@ -1,0 +1,64 @@
+[
+    {
+        "label": "Overview",
+        "rows": [
+            [
+                {
+                    "name": "name"
+                },
+                {
+                    "name": "contact"
+                }
+            ],
+            [
+                {
+                    "name": "phoneNumber"
+                },
+                {
+                    "name": "emailAddress"
+                }
+            ],
+            [
+                {
+                    "name": "vehicle"
+                },
+                {
+                    "name": "conversation"
+                }
+            ]
+        ]
+    },
+    {
+        "label": "Details",
+        "rows": [
+            [
+                {
+                    "name": "service"
+                },
+                {
+                    "name": "desiredTime"
+                }
+            ],
+            [
+                {
+                    "name": "status"
+                },
+                {
+                    "name": "channel"
+                }
+            ],
+            [
+                {
+                    "name": "source"
+                },
+                false
+            ],
+            [
+                {
+                    "name": "description",
+                    "fullWidth": true
+                }
+            ]
+        ]
+    }
+]

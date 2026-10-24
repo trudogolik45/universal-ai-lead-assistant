@@ -15,6 +15,7 @@ import json
 import re
 import shlex
 import subprocess
+import time
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -36,10 +37,17 @@ SECRET_ENV = (
     "META_APP_SECRET",
     "META_VERIFY_TOKEN",
     "META_PAGE_ACCESS_TOKEN",
+    "WHATSAPP_ACCESS_TOKEN",
+    "INSTAGRAM_ACCESS_TOKEN",
+    "SMSAPI_TOKEN",
     "TELEGRAM_BOT_TOKEN",
-    "TELEGRAM_WEBHOOK_SECRET",
     "RETRY_WEBHOOK_SECRET",
-    "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY",
+    "ESPOCRM_DB_PASSWORD",
+    "ESPOCRM_ADMIN_PASSWORD",
+    "ESPOCRM_API_KEY",
+    "N8N_HOOK_SECRET",
+    "REPORT_WEBHOOK_SECRET",
+    "SMTP_PASSWORD",
 )
 
 # Короче — не ищем: короткая строка («test») встречается в любом JSON и даёт ложную тревогу.
@@ -98,21 +106,33 @@ def secret_values(env: dict[str, str]) -> dict[str, str]:
 
 
 def push(n8n: N8n, workflows_dir: Path = WORKFLOWS_DIR) -> None:
-    database_url = container_env(n8n).get("DATABASE_URL")
-    if not database_url:
+    env = container_env(n8n)
+    if not env.get("DATABASE_URL"):
         raise SystemExit("В env n8n нет DATABASE_URL: credentials Postgres не из чего собрать")
-    import_file(n8n, "import:credentials", json.dumps(credentials(database_url)))
+    import_file(n8n, "import:credentials", json.dumps(credentials(env)))
     paths = sorted(workflows_dir.glob("*.json"))
     for path in paths:
         import_file(n8n, "import:workflow", path.read_text())
     for path in paths:
-        n8n.run(f"n8n publish:workflow --id={shlex.quote(json.loads(path.read_text())['id'])}")
+        run_cli(n8n, f"n8n publish:workflow --id={shlex.quote(json.loads(path.read_text())['id'])}")
     n8n.restart()
 
 
 def import_file(n8n: N8n, command: str, content: str) -> None:
     """Файл передаётся через stdin, а не аргументом: секреты не попадают в списки процессов."""
-    n8n.run(f"cat > {TMP_FILE} && n8n {command} --input={TMP_FILE}; status=$?; rm -f {TMP_FILE}; exit $status", content)
+    run_cli(n8n, f"cat > {TMP_FILE} && n8n {command} --input={TMP_FILE}; status=$?; rm -f {TMP_FILE}; exit $status", content)
+
+
+def run_cli(n8n: N8n, command: str, input: str | None = None, attempts: int = 5, pause: float = 2) -> str:
+    """CLI n8n пишет в ту же SQLite, что и работающий сервер: под нагрузкой хоста сервер держит её
+    дольше таймаута CLI, и тот падает с SQLITE_BUSY. Такой сбой повторяем, остальные — нет."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return n8n.run(command, input)
+        except RuntimeError as error:
+            if "SQLITE_BUSY" not in str(error) or attempt == attempts:
+                raise
+            time.sleep(pause * attempt)
 
 
 def pull(n8n: N8n, workflows_dir: Path = WORKFLOWS_DIR) -> list[Path]:

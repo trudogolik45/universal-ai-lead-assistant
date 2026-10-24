@@ -1,0 +1,30 @@
+{
+    "fields": {
+        "conversation": "Conversation",
+        "direction": "Direction",
+        "author": "Author",
+        "text": "Text",
+        "providerMessageId": "Channel message ID",
+        "sentAt": "Sent at"
+    },
+    "links": {
+        "conversation": "Conversation"
+    },
+    "options": {
+        "direction": {
+            "in": "Incoming",
+            "out": "Outgoing"
+        },
+        "author": {
+            "client": "Client",
+            "assistant": "Assistant",
+            "employee": "Employee"
+        }
+    },
+    "labels": {
+        "Create Message": "Create Message"
+    },
+    "tooltips": {
+        "sentAt": "When the message was written in the channel. The conversation is ordered by this time."
+    }
+}

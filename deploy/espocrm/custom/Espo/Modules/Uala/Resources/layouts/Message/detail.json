@@ -1,0 +1,35 @@
+[
+    {
+        "label": "",
+        "rows": [
+            [
+                {
+                    "name": "conversation"
+                },
+                {
+                    "name": "sentAt"
+                }
+            ],
+            [
+                {
+                    "name": "direction"
+                },
+                {
+                    "name": "author"
+                }
+            ],
+            [
+                {
+                    "name": "text",
+                    "fullWidth": true
+                }
+            ],
+            [
+                {
+                    "name": "providerMessageId"
+                },
+                false
+            ]
+        ]
+    }
+]

@@ -1,0 +1,29 @@
+[
+    {
+        "label": "",
+        "rows": [
+            [
+                {
+                    "name": "name"
+                },
+                {
+                    "name": "kind"
+                }
+            ],
+            [
+                {
+                    "name": "price"
+                },
+                {
+                    "name": "priceFrom"
+                }
+            ],
+            [
+                {
+                    "name": "description",
+                    "fullWidth": true
+                }
+            ]
+        ]
+    }
+]

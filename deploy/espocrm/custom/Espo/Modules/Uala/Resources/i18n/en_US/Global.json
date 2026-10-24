@@ -1,0 +1,18 @@
+{
+    "scopeNames": {
+        "Conversation": "Conversation",
+        "Message": "Message",
+        "Vehicle": "Vehicle",
+        "KnowledgeItem": "Knowledge base entry",
+        "RepairOrder": "Repair order",
+        "Estimate": "Estimate"
+    },
+    "scopeNamesPlural": {
+        "Conversation": "Conversations",
+        "Message": "Messages",
+        "Vehicle": "Vehicles",
+        "KnowledgeItem": "Knowledge base",
+        "RepairOrder": "Repair orders",
+        "Estimate": "Estimates"
+    }
+}

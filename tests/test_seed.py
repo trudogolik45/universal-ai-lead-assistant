@@ -13,21 +13,8 @@ def profiles(db):
     }
 
 
-def knowledge_kinds(db, slug):
-    return {
-        row[0]
-        for row in db.execute(
-            "select k.kind from knowledge_items k join companies c on c.id = k.company_id"
-            " where c.slug = %s",
-            (slug,),
-        )
-    }
-
-
-def row_counts(db):
-    return db.execute(
-        "select (select count(*) from companies), (select count(*) from knowledge_items)"
-    ).fetchone()
+def company_count(db):
+    return db.execute("select count(*) from companies").fetchone()[0]
 
 
 def test_seed_creates_three_polish_profiles(db, database_url):
@@ -43,40 +30,38 @@ def test_seed_creates_three_polish_profiles(db, database_url):
         assert handoff_rules
 
 
-def test_every_profile_has_full_knowledge_base(db, database_url):
-    seed(database_url)
-
-    for slug in SEEDED_SLUGS:
-        assert knowledge_kinds(db, slug) == {"service", "faq", "hours", "rule"}
-
-
-def test_services_have_prices(db, database_url):
-    seed(database_url)
-
-    unpriced = db.execute(
-        "select count(*) from knowledge_items where kind = 'service' and price is null"
-    ).fetchone()[0]
-    assert unpriced == 0
-
-
 def test_seed_twice_creates_no_duplicates(db, database_url):
     seed(database_url)
-    first = row_counts(db)
+    first = company_count(db)
 
     seed(database_url)
 
-    assert row_counts(db) == first
+    assert company_count(db) == first
 
 
-def test_seed_binds_demo_page_and_delivery_channel(db, database_url):
-    seed(database_url, demo_page_id="page-123", telegram_chat_id="-100500", spreadsheet_id="sheet-1")
+def test_seed_binds_demo_messenger_page(db, database_url):
+    seed(database_url, demo_page_id="1297733916767033")
+
+    demo = db.execute("select messenger_page_id from companies where slug = %s", (DEMO_COMPANY_SLUG,)).fetchone()
+    assert demo == ("1297733916767033",)
+
+
+def test_seed_binds_demo_whatsapp_number(db, database_url):
+    seed(database_url, demo_whatsapp_phone_number_id="pnid-123")
 
     demo = db.execute(
-        "select messenger_page_id, telegram_chat_id, sheets_spreadsheet_id, sheets_sheet_name"
-        " from companies where slug = %s",
-        (DEMO_COMPANY_SLUG,),
+        "select whatsapp_phone_number_id from companies where slug = %s", (DEMO_COMPANY_SLUG,)
     ).fetchone()
-    assert demo == ("page-123", "-100500", "sheet-1", "Leads")
+    assert demo == ("pnid-123",)
+
+
+def test_seed_binds_demo_instagram_account(db, database_url):
+    seed(database_url, demo_instagram_account_id="ig-123")
+
+    demo = db.execute(
+        "select instagram_account_id from companies where slug = %s", (DEMO_COMPANY_SLUG,)
+    ).fetchone()
+    assert demo == ("ig-123",)
 
 
 def test_reseed_keeps_bindings_and_owner_edits_of_mode(db, database_url):

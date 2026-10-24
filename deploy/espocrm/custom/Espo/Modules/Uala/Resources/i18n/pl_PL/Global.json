@@ -1,0 +1,20 @@
+{
+    "scopeNames": {
+        "Conversation": "Rozmowa",
+        "Message": "Wiadomość",
+        "Vehicle": "Pojazd",
+        "KnowledgeItem": "Wpis bazy wiedzy",
+        "Lead": "Zgłoszenie",
+        "RepairOrder": "Zlecenie naprawy",
+        "Estimate": "Kosztorys"
+    },
+    "scopeNamesPlural": {
+        "Conversation": "Rozmowy",
+        "Message": "Wiadomości",
+        "Vehicle": "Pojazdy",
+        "KnowledgeItem": "Baza wiedzy",
+        "Lead": "Zgłoszenia",
+        "RepairOrder": "Zlecenia naprawy",
+        "Estimate": "Kosztorysy"
+    }
+}

@@ -1,0 +1,29 @@
+"""Смена статуса Заказ-наряда в EspoCRM: хук модуля Uala зовёт webhook n8n (контракт — tests/test_espocrm.py)."""
+
+import uuid
+
+import httpx
+
+from tests.espocrm import N8N_HOOK_SECRET
+
+
+def new_repair_order_id() -> str:
+    return uuid.uuid4().hex[:17]
+
+
+def change_status(
+    n8n_url, status, conversations, secret=N8N_HOOK_SECRET, repair_order_id=None, name="Skoda Octavia: hamulce"
+) -> httpx.Response:
+    """Вызов, который делает хук EspoCRM, когда мастер меняет статус Заказ-наряда:
+    conversations — Беседы Клиента в CRM, [{channel, sender_id}]."""
+    return httpx.post(
+        f"{n8n_url}/webhook/repair-status",
+        headers={"X-Uala-Secret": secret},
+        json={
+            "crm_repair_order_id": repair_order_id or new_repair_order_id(),
+            "name": name,
+            "status": status,
+            "conversations": conversations,
+        },
+        timeout=10,
+    )

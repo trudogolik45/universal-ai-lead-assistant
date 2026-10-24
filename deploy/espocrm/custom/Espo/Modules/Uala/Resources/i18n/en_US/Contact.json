@@ -1,0 +1,18 @@
+{
+    "fields": {
+        "marketingConsent": "Marketing consent",
+        "conversations": "Conversations",
+        "vehicles": "Vehicles",
+        "leads": "Leads",
+        "repairOrders": "Repair orders"
+    },
+    "links": {
+        "conversations": "Conversations",
+        "vehicles": "Vehicles",
+        "leads": "Leads",
+        "repairOrders": "Repair orders"
+    },
+    "tooltips": {
+        "marketingConsent": "The client agreed to service and seasonal tyre reminders. Without consent such messages are not sent."
+    }
+}

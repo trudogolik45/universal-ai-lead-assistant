@@ -6,7 +6,7 @@
 
 import pytest
 
-from scripts.n8n_sync import SecretLeak, pull, repo_workflow
+from scripts.n8n_sync import SecretLeak, pull, repo_workflow, run_cli
 from tests.stand import WORKFLOWS_DIR
 
 # Секреты стенда из docker-compose.test.yml.
@@ -15,10 +15,16 @@ STAND_SECRETS = [
     "test-app-secret",
     "test-verify-token",
     "test-page-token",
+    "test-whatsapp-token",
+    "test-instagram-token",
+    "test-smsapi-token",
     "test-openrouter-key",
     "test-telegram-token",
-    "test-telegram-webhook-secret",
     "test-retry-secret",
+    "test-espocrm-key",
+    "test-n8n-hook-secret",
+    "test-report-secret",
+    "test-smtp-password",
     "postgresql://test:test@",
 ]
 
@@ -53,6 +59,41 @@ def test_export_drops_run_data_and_keeps_workflow_inactive():
         "id": "wf1", "name": "Demo", "active": False,
         "settings": {"executionOrder": "v1"}, "nodes": [], "connections": {},
     }
+
+
+class BusyN8n:
+    """n8n, чей работающий сервер первые busy вызовов CLI держит SQLite."""
+
+    def __init__(self, busy: int):
+        self.busy = busy
+        self.commands: list[str] = []
+
+    def run(self, command: str, input: str | None = None) -> str:
+        self.commands.append(command)
+        if len(self.commands) <= self.busy:
+            raise RuntimeError("QueryFailedError: SQLITE_BUSY: database is locked")
+        return ""
+
+
+def test_cli_command_is_repeated_while_n8n_database_is_locked():
+    n8n = BusyN8n(busy=2)
+
+    run_cli(n8n, "n8n publish:workflow --id=wf1", pause=0)
+
+    assert n8n.commands == ["n8n publish:workflow --id=wf1"] * 3
+
+
+def test_cli_command_failing_otherwise_is_not_repeated():
+    class Broken(BusyN8n):
+        def run(self, command, input=None):
+            self.commands.append(command)
+            raise RuntimeError("Workflow not found")
+
+    n8n = Broken(busy=0)
+
+    with pytest.raises(RuntimeError, match="not found"):
+        run_cli(n8n, "n8n publish:workflow --id=wf1", pause=0)
+    assert len(n8n.commands) == 1
 
 
 def test_export_refuses_workflow_with_secret_value():

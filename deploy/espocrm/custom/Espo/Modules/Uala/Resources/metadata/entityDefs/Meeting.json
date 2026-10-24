@@ -1,0 +1,35 @@
+{
+    "fields": {
+        "assignedUser": {
+            "required": false
+        },
+        "vehicle": {
+            "type": "link"
+        },
+        "channel": {
+            "type": "enum",
+            "options": [
+                "",
+                "messenger",
+                "instagram",
+                "whatsapp",
+                "call"
+            ],
+            "default": "",
+            "audited": true,
+            "tooltip": true
+        }
+    },
+    "links": {
+        "vehicle": {
+            "type": "belongsTo",
+            "entity": "Vehicle",
+            "foreign": "meetings"
+        },
+        "repairOrders": {
+            "type": "hasMany",
+            "entity": "RepairOrder",
+            "foreign": "meeting"
+        }
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "controller": "controllers/record",
+    "boolFilterList": ["onlyMy"],
+    "iconClass": "fas fa-comments",
+    "relationshipPanels": {
+        "messages": {
+            "syncWithModel": true
+        }
+    }
+}

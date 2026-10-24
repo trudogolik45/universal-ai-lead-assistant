@@ -1,0 +1,22 @@
+{
+    "fields": {
+        "brand": "Marka",
+        "model": "Model",
+        "year": "Rok produkcji",
+        "licensePlate": "Numer rejestracyjny",
+        "vin": "VIN",
+        "contact": "Klient",
+        "leads": "Zgłoszenia",
+        "meetings": "Wizyty",
+        "repairOrders": "Zlecenia naprawy"
+    },
+    "links": {
+        "contact": "Klient",
+        "leads": "Zgłoszenia",
+        "meetings": "Wizyty",
+        "repairOrders": "Zlecenia naprawy"
+    },
+    "labels": {
+        "Create Vehicle": "Dodaj pojazd"
+    }
+}

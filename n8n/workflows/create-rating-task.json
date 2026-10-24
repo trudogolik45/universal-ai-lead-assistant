@@ -1,0 +1,197 @@
+{
+  "id": "uala0ratingTask0",
+  "name": "Create rating task",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "company_id",
+              "type": "string"
+            },
+            {
+              "name": "crm_repair_order_id",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "e5f6a7b0-0032-4000-8000-000000000001",
+      "name": "Repair rated badly",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Оценка 1–3 ещё без Задачи в CRM и не в работе у другого вызова (свежая попытка моложе 5 минут).\n-- Строки нет — задача уже создана или создаётся: поток останавливается.\n-- Имя и телефон — из последней Заявки этого Клиента в этом Канале.\nupdate repair_ratings r set task_claimed_at = now()\nfrom conversations v\nwhere r.company_id = nullif($1, '')::uuid and r.crm_repair_order_id = $2 and v.id = r.conversation_id\n  and r.rating <= 3 and r.crm_task_id is null\n  and (r.task_claimed_at is null or r.task_claimed_at < now() - interval '5 minutes')\nreturning r.company_id, r.crm_repair_order_id, r.rating, v.channel, v.sender_id,\n  (select l.name from leads l join conversations c on c.id = l.conversation_id\n   where c.company_id = v.company_id and c.channel = v.channel and c.sender_id = v.sender_id and l.name is not null\n   order by l.updated_at desc limit 1) as name,\n  (select l.phone from leads l join conversations c on c.id = l.conversation_id\n   where c.company_id = v.company_id and c.channel = v.channel and c.sender_id = v.sender_id and l.phone is not null\n   order by l.updated_at desc limit 1) as phone",
+        "options": {
+          "queryReplacement": "={{ [$json.company_id, $json.crm_repair_order_id] }}"
+        }
+      },
+      "id": "e5f6a7b0-0032-4000-8000-000000000002",
+      "name": "Claim rating",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Задача человеку «разобраться» на польском: её читают сотрудники Заказчика. Ссылка на Беседу —\n// родитель задачи в CRM, Заказ-наряд — по его id.\nconst CHANNELS = { messenger: 'Messenger', instagram: 'Instagram', whatsapp: 'WhatsApp', call: 'Telefon' };\nconst rated = $json;\nconst client = rated.name || `${CHANNELS[rated.channel]} · ${rated.sender_id}`;\nconst description = [\n  `Ocena naprawy: ${rated.rating}/5`,\n  `Kanał: ${CHANNELS[rated.channel]}`,\n  ...(rated.phone ? [`Telefon: ${rated.phone}`] : []),\n  `Zlecenie naprawy: ${rated.crm_repair_order_id}`,\n  'Skontaktuj się z klientem i wyjaśnij, co poszło nie tak.',\n].join('\\n');\nreturn { json: { name: `Zła ocena naprawy ${rated.rating}/5: ${client}`, description } };"
+      },
+      "id": "e5f6a7b0-0032-4000-8000-000000000003",
+      "name": "Task summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "id": "e5f6a7b0-0032-4000-8000-000000000004",
+      "name": "Create task in CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmAdapter0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "create_task",
+            "data": "={{ { kind: 'bad_rating', channel: $('Claim rating').item.json.channel, sender_id: $('Claim rating').item.json.sender_id, name: $json.name, description: $json.description } }}"
+          },
+          "matchingColumns": [
+            "operation",
+            "data"
+          ],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update repair_ratings set crm_task_id = $3 where company_id = $1::uuid and crm_repair_order_id = $2",
+        "options": {
+          "queryReplacement": "={{ [$('Claim rating').item.json.company_id, $('Claim rating').item.json.crm_repair_order_id, $json.crm_task_id] }}"
+        }
+      },
+      "id": "e5f6a7b0-0032-4000-8000-000000000005",
+      "name": "Mark created",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Repair rated badly": {
+      "main": [
+        [
+          {
+            "node": "Claim rating",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim rating": {
+      "main": [
+        [
+          {
+            "node": "Task summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task summary": {
+      "main": [
+        [
+          {
+            "node": "Create task in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create task in CRM": {
+      "main": [
+        [
+          {
+            "node": "Mark created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
