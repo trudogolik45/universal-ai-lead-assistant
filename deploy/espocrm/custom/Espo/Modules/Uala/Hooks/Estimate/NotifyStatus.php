@@ -38,7 +38,7 @@ class NotifyStatus implements AfterSave
             'amount' => $entity->get('amount'),
             'currency' => $entity->get('amountCurrency'),
             'conversations' => $this->clientConversations->of($this->contactId($entity->get('repairOrderId'))),
-        ]);
+        ], $entity);
     }
 
     private function contactId(?string $repairOrderId): ?string

@@ -31,6 +31,10 @@ PROBE_METHOD = "PUT"
 # EspoCRM: своя база в Postgres стенда, основной контейнер, cron-задачи и WebSocket.
 ESPOCRM_DATABASE = "espocrm"
 ESPOCRM_SERVICES = ("espocrm", "espocrm-daemon", "espocrm-websocket")
+# Почта EspoCRM стенда — Mailpit без TLS и логина, как SMTP n8n стенда.
+STAND_SMTP = {"emailAddress": "crm@autopro.test", "smtpHost": "mailpit", "smtpPort": 1025, "smtpSecurity": "",
+              "smtpAuth": False}
+STAND_SMTP_ADDRESS = "mailpit:1025"
 
 
 def docker_available() -> bool:
@@ -92,8 +96,19 @@ class Stand:
         admin = EspoCrm(url, admin=ESPOCRM_ADMIN)
         # Healthcheck смотрит статику; первый запрос к API собирает кэш и под нагрузкой идёт долго.
         wait_until(lambda: admin.http.get("App/user").status_code == 200, f"API EspoCRM {url}", timeout=300)
-        api = EspoCrm(url, api_key=bootstrap(admin))
+        wait_until(self.allow_mailpit_smtp, "Mailpit в emailServerAllowedAddressList EspoCRM")
+        api = EspoCrm(url, api_key=bootstrap(admin, STAND_SMTP))
         return EspoCrmStand(url, admin, api, websocket=self.host_url("espocrm-websocket", 8080))
+
+    def allow_mailpit_smtp(self) -> bool:
+        """Mailpit — внутренний адрес: SMTP на него EspoCRM пускает только по списку (в проде ящик внешний).
+        Список — массив, через env его не задать. Daemon и WebSocket на старте сами переписывают config
+        EspoCRM и могут затереть параметр: ставим и проверяем, пока он не удержится."""
+        command = ("exec", "-T", "--user", "www-data", "espocrm", "bin/command")
+        self.compose(*command, "config:set", "emailServerAllowedAddressList", json.dumps([STAND_SMTP_ADDRESS]),
+                     "--type=json")
+        time.sleep(3)
+        return STAND_SMTP_ADDRESS in self.compose(*command, "config:get", "emailServerAllowedAddressList")
 
     def mailpit_url(self) -> str:
         """API Mailpit: письма, которые n8n отправил по SMTP. Поднимается вместе с n8n."""

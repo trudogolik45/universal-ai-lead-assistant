@@ -30,6 +30,6 @@ class ReturnToAssistant implements AfterSave
             return;
         }
 
-        $this->n8n->post('ualaTaskDoneUrl', ['crm_task_id' => $entity->getId()]);
+        $this->n8n->post('ualaTaskDoneUrl', ['crm_task_id' => $entity->getId()], $entity);
     }
 }

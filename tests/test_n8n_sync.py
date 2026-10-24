@@ -22,7 +22,7 @@ STAND_SECRETS = [
     "test-telegram-token",
     "test-retry-secret",
     "test-espocrm-key",
-    "test-employee-reply-secret",
+    "test-n8n-hook-secret",
     "test-report-secret",
     "test-smtp-password",
     "postgresql://test:test@",

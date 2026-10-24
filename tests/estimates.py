@@ -5,13 +5,13 @@ import uuid
 
 import httpx
 
-from tests.espocrm import EMPLOYEE_REPLY_SECRET
+from tests.espocrm import N8N_HOOK_SECRET
 from tests.retry import RETRY_SECRET
 
 
 def change_estimate_status(
     n8n_url, status, conversations, estimate_id=None, order_id=None, name="Wymiana sprzęgła",
-    amount=1250.5, currency="PLN", secret=EMPLOYEE_REPLY_SECRET,
+    amount=1250.5, currency="PLN", secret=N8N_HOOK_SECRET,
 ) -> httpx.Response:
     """Вызов, который делает хук EspoCRM, когда сотрудник меняет статус Сметы:
     conversations — Беседы Клиента Заказ-наряда в CRM, [{channel, sender_id}]."""

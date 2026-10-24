@@ -2,10 +2,10 @@
 
 import httpx
 
-from tests.espocrm import EMPLOYEE_REPLY_SECRET
+from tests.espocrm import N8N_HOOK_SECRET
 
 
-def complete_task(n8n_url, crm_task_id, secret=EMPLOYEE_REPLY_SECRET) -> httpx.Response:
+def complete_task(n8n_url, crm_task_id, secret=N8N_HOOK_SECRET) -> httpx.Response:
     """Вызов, который делает хук EspoCRM, когда сотрудник закрывает Задачу."""
     return httpx.post(
         f"{n8n_url}/webhook/task-done",

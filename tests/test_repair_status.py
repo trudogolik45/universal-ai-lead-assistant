@@ -122,3 +122,18 @@ def test_repair_status_with_wrong_secret_is_rejected(db, fake, n8n_url, company)
 
     assert response.status_code == 401
     stays(lambda: whatsapp_sent(fake) == [])
+
+
+def test_status_sent_to_client_is_written_to_conversation_in_crm(db, fake, crm, n8n_url, company):
+    client = client_in(db, company, "messenger")
+
+    change_status(n8n_url, "Ready", [client])
+
+    def written():
+        found = [c for c in crm.records("Conversation") if c["senderId"] == client["sender_id"]]
+        return found and crm.related("Conversation", found[0]["id"], "messages")
+
+    [message] = eventually(written)
+    assert (message["direction"], message["author"], message["text"]) == (
+        "out", "assistant", "AutoPro Service: Twój samochód jest gotowy do odbioru."
+    )

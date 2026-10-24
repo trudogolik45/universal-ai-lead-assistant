@@ -30,7 +30,7 @@ class SendToClient implements AfterSave
             return;
         }
 
-        $this->n8n->post('ualaEmployeeReplyUrl', $this->payload($entity));
+        $this->n8n->post('ualaEmployeeReplyUrl', $this->payload($entity), $entity);
     }
 
     private function payload(Entity $message): array

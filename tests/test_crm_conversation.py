@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from tests.factories import create_company
+from tests.factories import add_message, create_company, open_conversation
 from tests.knowledge import KNOWLEDGE_PATH
 from tests.meta import MetaClient, messenger_payload, new_mid
 from tests.openrouter import assistant_reply, respond_with
@@ -131,3 +131,13 @@ def test_retry_does_not_write_messages_already_in_crm_again(db, fake, crm, meta,
     run_retry(n8n_url)
 
     stays(lambda: len(crm.records("Message")) == 2, seconds=5)
+
+
+def test_message_never_handed_to_crm_is_written_by_retry(db, crm, n8n_url, company, client):
+    """Запись в CRM не началась вовсе: n8n перезапустился между сохранением Сообщения и записью."""
+    add_message(db, company, open_conversation(db, company, client))
+    db.execute("update messages set created_at = now() - interval '10 minutes'")
+
+    run_retry(n8n_url)
+
+    assert eventually(lambda: conversation_messages(crm, client)) == [("in", "client", "Dzień dobry")]

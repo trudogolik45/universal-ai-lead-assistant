@@ -36,7 +36,7 @@
           "conditions": [
             {
               "id": "c1",
-              "leftValue": "={{ !!$env.EMPLOYEE_REPLY_SECRET && $json.headers['x-uala-secret'] === $env.EMPLOYEE_REPLY_SECRET }}",
+              "leftValue": "={{ !!$env.N8N_HOOK_SECRET && $json.headers['x-uala-secret'] === $env.N8N_HOOK_SECRET }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -125,9 +125,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Готовая Смета уходит в Беседу, где Клиент писал последним (как статус ремонта): Клиент писал\n-- и в Messenger, и в WhatsApp — одно сообщение, а не два. Беседы нет в буфере — сообщать некуда.\n-- Смету поправили и снова отметили готовой — цепочка начинается заново с новой Сметы.\nwith client as (\n  select v.id, v.company_id\n  from conversations v\n  join jsonb_to_recordset($2::jsonb) as c(channel text, sender_id text)\n    on c.channel = v.channel and c.sender_id = v.sender_id\n  order by v.last_message_at desc\n  limit 1\n),\nrestart as (\n  delete from estimate_steps where crm_estimate_id = $1\n)\ninsert into estimates (crm_estimate_id, company_id, conversation_id, crm_repair_order_id, name, amount, currency)\nselect $1, company_id, id, $3, $4, $5::numeric, $6 from client\non conflict (crm_estimate_id) do update set\n  company_id = excluded.company_id, conversation_id = excluded.conversation_id,\n  crm_repair_order_id = excluded.crm_repair_order_id, name = excluded.name,\n  amount = excluded.amount, currency = excluded.currency, ready_at = now(), stopped_at = null\nreturning crm_estimate_id",
+        "query": "-- Готовая Смета уходит в Беседу, где Клиент писал последним (как статус ремонта): Клиент писал\n-- и в Messenger, и в WhatsApp — одно сообщение, а не два. Беседы нет в буфере — сообщать некуда.\n-- Смету поправили и снова отметили готовой — цепочка начинается заново с новой Сметы.\nwith client as (\n  select v.id, v.company_id\n  from conversations v\n  join jsonb_to_recordset($2::jsonb) as c(channel text, sender_id text)\n    on c.channel = v.channel and c.sender_id = v.sender_id\n  -- Только Заказчик этой CRM: тот же Клиент WhatsApp мог писать и другим Заказчикам.\n  where $7 = '' or v.company_id = (select id from companies where slug = $7)\n  order by v.last_message_at desc\n  limit 1\n),\nrestart as (\n  delete from estimate_steps where crm_estimate_id = $1\n)\ninsert into estimates (crm_estimate_id, company_id, conversation_id, crm_repair_order_id, name, amount, currency)\nselect $1, company_id, id, $3, $4, $5::numeric, $6 from client\non conflict (crm_estimate_id) do update set\n  company_id = excluded.company_id, conversation_id = excluded.conversation_id,\n  crm_repair_order_id = excluded.crm_repair_order_id, name = excluded.name,\n  amount = excluded.amount, currency = excluded.currency, ready_at = now(), stopped_at = null\nreturning crm_estimate_id",
         "options": {
-          "queryReplacement": "={{ [$('Estimate status changed').first().json.body.crm_estimate_id, JSON.stringify($('Estimate status changed').first().json.body.conversations || []), $('Estimate status changed').first().json.body.crm_repair_order_id, $('Estimate status changed').first().json.body.name, $('Estimate status changed').first().json.body.amount, $('Estimate status changed').first().json.body.currency] }}"
+          "queryReplacement": "={{ [$('Estimate status changed').first().json.body.crm_estimate_id, JSON.stringify($('Estimate status changed').first().json.body.conversations || []), $('Estimate status changed').first().json.body.crm_repair_order_id, $('Estimate status changed').first().json.body.name, $('Estimate status changed').first().json.body.amount, $('Estimate status changed').first().json.body.currency, $('Estimate status changed').first().json.body.company || ''] }}"
         }
       },
       "name": "Save estimate",
@@ -316,7 +316,7 @@
           "conditions": [
             {
               "id": "c1",
-              "leftValue": "={{ !$json.task }}",
+              "leftValue": "={{ !$('Step').item.json.task }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -348,9 +348,9 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "conversation_id": "={{ $json.conversation_id }}",
-            "text": "={{ $json.text }}",
-            "template": "={{ $json.template }}"
+            "conversation_id": "={{ $('Step').item.json.conversation_id }}",
+            "text": "={{ $('Step').item.json.text }}",
+            "template": "={{ $('Step').item.json.template }}"
           },
           "matchingColumns": [
             "conversation_id",
@@ -409,7 +409,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Шаг сделан: Клиенту ушло или задача создана. Не вышло — шаг ждёт повтора следующим запуском.\nupdate estimate_steps set done_at = now()\nwhere crm_estimate_id = $1 and step = $2",
+        "query": "-- Шаг отмечен сделанным до отправки: Клиенту или в CRM не уйдёт второй раз, когда отметка\n-- упала после отправки. Не ушло — «Reopen step» открывает шаг снова, повтор — следующим запуском.\nupdate estimate_steps set done_at = now()\nwhere crm_estimate_id = $1 and step = $2",
         "options": {
           "queryReplacement": "={{ [$('Step').item.json.crm_estimate_id, $('Step').item.json.step] }}"
         }
@@ -441,7 +441,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "operation": "create_task",
-            "data": "={{ $json.task }}"
+            "data": "={{ $('Step').item.json.task }}"
           },
           "matchingColumns": [
             "operation",
@@ -485,6 +485,45 @@
       ],
       "id": "e5710000-0000-4000-8000-000000000019",
       "onError": "continueErrorOutput"
+    },
+    {
+      "id": "270a5a7f-7478-444d-a7a9-c3b87c7cb9b4",
+      "name": "Respond saved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1100,
+        100
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "0d023471-3375-4615-9871-7af16f940b13",
+      "name": "Reopen step",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1980,
+        600
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Клиенту не ушло или задача не создалась: шаг снова не сделан, следующий запуск после\n-- 5 минут повторит его.\nupdate estimate_steps set done_at = null\nwhere crm_estimate_id = $1 and step = $2",
+        "options": {
+          "queryReplacement": "={{ [$('Step').item.json.crm_estimate_id, $('Step').item.json.step] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
     }
   ],
   "connections": {
@@ -503,7 +542,7 @@
       "main": [
         [
           {
-            "node": "Respond 200",
+            "node": "Estimate ready",
             "type": "main",
             "index": 0
           }
@@ -519,13 +558,7 @@
     },
     "Respond 200": {
       "main": [
-        [
-          {
-            "node": "Estimate ready",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     },
     "Estimate ready": {
@@ -550,7 +583,7 @@
       "main": [
         [
           {
-            "node": "Claim due steps",
+            "node": "Respond saved",
             "type": "main",
             "index": 0
           }
@@ -623,7 +656,7 @@
       "main": [
         [
           {
-            "node": "Message to client",
+            "node": "Mark step done",
             "type": "main",
             "index": 0
           }
@@ -650,9 +683,10 @@
     },
     "Send to client": {
       "main": [
+        [],
         [
           {
-            "node": "Mark step done",
+            "node": "Reopen step",
             "type": "main",
             "index": 0
           }
@@ -661,9 +695,43 @@
     },
     "Create silent client task": {
       "main": [
+        [],
         [
           {
-            "node": "Mark step done",
+            "node": "Reopen step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop chain": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond saved": {
+      "main": [
+        [
+          {
+            "node": "Claim due steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark step done": {
+      "main": [
+        [
+          {
+            "node": "Message to client",
             "type": "main",
             "index": 0
           }

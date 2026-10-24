@@ -27,8 +27,10 @@ def appointment(crm, channel, created_at):
     crm.add("Meeting", {"name": "Wizyta", "status": "Planned", "channel": channel, "createdAt": created_at})
 
 
-def report(mailpit):
-    return eventually(lambda: mailpit.messages())[0]
+def report(mailpit, subject):
+    """Письмо отчёта с этой темой, последнее: хвост письма прошлого теста (оно ушло после очистки ящика)
+    с другим периодом его не подменит."""
+    return eventually(lambda: [m for m in mailpit.messages() if m.subject == subject])[-1]
 
 
 def test_daily_report_counts_previous_day_in_warsaw_time_per_channel(n8n_url, crm, mailpit):
@@ -45,9 +47,8 @@ def test_daily_report_counts_previous_day_in_warsaw_time_per_channel(n8n_url, cr
     response = run_report(n8n_url, "daily", "2026-10-20")
 
     assert response.status_code == 200
-    mail = report(mailpit)
+    mail = report(mailpit, "Raport dzienny: 19.10.2026")
     assert (mail.sender, mail.to) == (SENDER, [OWNER])
-    assert mail.subject == "Raport dzienny: 19.10.2026"
     lines = mail.text.splitlines()
     assert "Messenger: zgłoszenia 2, wizyty 1, konwersja 50%" in lines
     assert "WhatsApp: zgłoszenia 1, wizyty 1, konwersja 100%" in lines
@@ -67,8 +68,7 @@ def test_weekly_report_covers_previous_monday_to_sunday_across_time_change(n8n_u
 
     run_report(n8n_url, "weekly", "2026-10-28")
 
-    mail = report(mailpit)
-    assert mail.subject == "Raport tygodniowy: 19.10.2026–25.10.2026"
+    mail = report(mailpit, "Raport tygodniowy: 19.10.2026–25.10.2026")
     lines = mail.text.splitlines()
     assert "Instagram: zgłoszenia 2, wizyty 1, konwersja 50%" in lines
     assert "Telefon: zgłoszenia 1, wizyty 0, konwersja 0%" in lines
@@ -82,7 +82,7 @@ def test_records_without_channel_are_counted_separately_and_in_total(n8n_url, cr
 
     run_report(n8n_url, "daily", "2026-10-20")
 
-    lines = report(mailpit).text.splitlines()
+    lines = report(mailpit, "Raport dzienny: 19.10.2026").text.splitlines()
     assert "Bez kanału: zgłoszenia 1, wizyty 1, konwersja 100%" in lines
     assert "Razem: zgłoszenia 2, wizyty 1, konwersja 50%" in lines
 
@@ -91,7 +91,7 @@ def test_report_without_today_covers_yesterday(n8n_url, crm, mailpit):
     run_report(n8n_url, "daily")
 
     yesterday = (datetime.now(ZoneInfo("Europe/Warsaw")).date() - timedelta(days=1)).strftime("%d.%m.%Y")
-    assert report(mailpit).subject == f"Raport dzienny: {yesterday}"
+    assert report(mailpit, f"Raport dzienny: {yesterday}")
 
 
 @pytest.mark.parametrize("secret", ["wrong-secret", ""])

@@ -12,7 +12,8 @@ from tests.fake_server import Response
 from tests.meta import MetaClient, messenger_payload, new_mid
 from tests.openrouter import assistant_reply, respond_with
 from tests.polling import eventually, stays
-from tests.retry import run_retry
+from tests.retry import run_retry, sending_stale
+from tests.telegram import ALERT_CHAT_ID, sent_to_telegram
 
 PAGE_ID = "page-300"
 SEND_API_PATH = "/meta/me/messages"
@@ -100,3 +101,46 @@ def test_processed_message_is_not_answered_again_by_retry(db, fake, meta, n8n_ur
     run_retry(n8n_url)
 
     stays(lambda: len(replies_sent(fake)) == 1)
+
+
+def attempt_done(fake, attempt):
+    """Попытка обработки дошла до Базы знаний: узел читает её дважды, прежде чем сдаться."""
+    eventually(lambda: len(knowledge.knowledge_requests(fake)) >= 2 * attempt)
+
+
+def test_processing_failing_three_times_alerts_developers_once(db, fake, meta, n8n_url, client):
+    knowledge.respond_with(fake, Response(500, {}))
+    meta.post(messenger_payload(PAGE_ID, client, "Ile kosztuje wymiana oleju?"))
+    attempt_done(fake, 1)
+    processing_stale(db)
+    run_retry(n8n_url)
+    attempt_done(fake, 2)
+    stays(lambda: sent_to_telegram(fake) == [])
+
+    for attempt in (3, 4):
+        processing_stale(db)
+        run_retry(n8n_url)
+        attempt_done(fake, attempt)
+
+    [alert] = eventually(lambda: sent_to_telegram(fake))
+    assert alert["chat_id"] == ALERT_CHAT_ID
+    for expected in ("Inbox Co", client, "Ile kosztuje wymiana oleju?"):
+        assert expected in alert["text"]
+    stays(lambda: len(sent_to_telegram(fake)) == 1)
+
+
+def test_reply_lost_to_channel_failure_is_sent_again_by_retry(db, fake, meta, n8n_url, client):
+    respond_with(fake, assistant_reply(reply="Dzień dobry, w czym pomóc?"))
+    fake.respond("POST", SEND_API_PATH, Response(500, {}), Response(200, {}))
+    meta.post(messenger_payload(PAGE_ID, client, "Dzień dobry"))
+    eventually(lambda: replies_sent(fake))
+
+    sending_stale(db)
+    run_retry(n8n_url)
+
+    assert eventually(lambda: len(replies_sent(fake)) == 2 and replies_sent(fake))[1].json()["message"] == {
+        "text": "Dzień dobry, w czym pomóc?"
+    }
+    sending_stale(db)
+    run_retry(n8n_url)
+    stays(lambda: len(replies_sent(fake)) == 2)

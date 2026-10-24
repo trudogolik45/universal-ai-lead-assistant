@@ -59,7 +59,7 @@ services:
       ALERT_TELEGRAM_CHAT_ID: "-1009990000000"
       RETRY_WEBHOOK_SECRET: test-retry-secret
       ESPOCRM_API_KEY: test-espocrm-key
-      EMPLOYEE_REPLY_SECRET: test-employee-reply-secret
+      N8N_HOOK_SECRET: test-n8n-hook-secret
       REPORT_WEBHOOK_SECRET: test-report-secret
       # Отчёты владельцу: письма уходят в Mailpit стенда, он принимает любой логин.
       SMTP_HOST: mailpit
@@ -127,7 +127,10 @@ services:
       ESPOCRM_CONFIG_UALA_TASK_DONE_URL: ${TASK_DONE_URL:-http://n8n:5678/webhook/task-done}
       ESPOCRM_CONFIG_UALA_REPAIR_STATUS_URL: ${REPAIR_STATUS_URL:-http://n8n:5678/webhook/repair-status}
       ESPOCRM_CONFIG_UALA_ESTIMATE_URL: ${ESTIMATE_URL:-http://n8n:5678/webhook/estimate}
-      ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_SECRET: test-employee-reply-secret
+      ESPOCRM_CONFIG_UALA_N8N_HOOK_SECRET: test-n8n-hook-secret
+      # Повтор вызова n8n: в проде пауза 60 с × номер попытки, в стенде — секунда.
+      ESPOCRM_CONFIG_UALA_N8N_RETRY_DELAY: "1"
+      ESPOCRM_CONFIG_UALA_COMPANY: autopro-service
     volumes:
       - /var/www/html/data
     extra_hosts:
@@ -142,6 +145,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
 
   espocrm-daemon:
     <<: *espocrm

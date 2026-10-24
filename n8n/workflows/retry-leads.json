@@ -284,7 +284,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Сообщения, не дошедшие до CRM (CRM лежала, сбой n8n): попытка старше 5 минут.\n-- По порядку Беседы: Сообщения ложатся в CRM в том же порядке.\nselect id as message_id from messages\nwhere crm_message_id is null and crm_claimed_at < now() - interval '5 minutes'\norder by created_at\nlimit 200",
+        "query": "-- Сообщения, не дошедшие до CRM (CRM лежала, сбой n8n): попытка старше 5 минут или, если записи\n-- не было вовсе (n8n упал до неё), Сообщение старше 5 минут. Взятие в работу атомарно — дубля нет.\n-- По порядку Беседы: Сообщения ложатся в CRM в том же порядке.\nselect id as message_id from messages\nwhere crm_message_id is null and coalesce(crm_claimed_at, created_at) < now() - interval '5 minutes'\norder by created_at\nlimit 200",
         "options": {}
       },
       "credentials": {
@@ -350,7 +350,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Передачи человеку без Задачи в CRM (CRM лежала, сбой n8n): попытка старше 5 минут.\nselect id as lead_id from leads\nwhere status = 'needs_human' and handoff_task_id is null\n  and handoff_task_claimed_at < now() - interval '5 minutes'\norder by created_at\nlimit 200",
+        "query": "-- Передачи человеку без Задачи в CRM (CRM лежала, сбой n8n): попытка старше 5 минут или, если попытки\n-- не было вовсе (n8n упал сразу после Передачи), Заявка старше 5 минут. Взятие в работу атомарно.\nselect id as lead_id from leads\nwhere status = 'needs_human' and handoff_task_id is null\n  and coalesce(handoff_task_claimed_at, created_at) < now() - interval '5 minutes'\norder by created_at\nlimit 200",
         "options": {}
       },
       "credentials": {
@@ -547,6 +547,72 @@
         880,
         1700
       ]
+    },
+    {
+      "id": "a3d6659c-4c5a-48c9-af42-83e15e245ab0",
+      "name": "Find unsent messages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        1900
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Очередь отправки: Клиенту не ушло (Канал не принял, сбой n8n), попытка старше 5 минут.\n-- Повторы — час (12 попыток): дальше ответ устарел, Беседу видит сотрудник в CRM.\nselect id as outbox_id from outbox\nwhere sent_at is null and claimed_at < now() - interval '5 minutes' and attempts < 12\norder by created_at\nlimit 200",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "db02e696-777f-4972-ad3c-7365efb4143f",
+      "name": "Send again",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        1900
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0sendClient0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "outbox_id": "={{ $json.outbox_id }}"
+          },
+          "matchingColumns": [
+            "outbox_id"
+          ],
+          "schema": [
+            {
+              "id": "outbox_id",
+              "displayName": "outbox_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -638,6 +704,11 @@
             "node": "Find bad ratings without task",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Find unsent messages",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -702,6 +773,17 @@
         [
           {
             "node": "Create rating task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find unsent messages": {
+      "main": [
+        [
+          {
+            "node": "Send again",
             "type": "main",
             "index": 0
           }

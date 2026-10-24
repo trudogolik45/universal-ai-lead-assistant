@@ -4,7 +4,7 @@ import uuid
 
 import httpx
 
-from tests.espocrm import EMPLOYEE_REPLY_SECRET
+from tests.espocrm import N8N_HOOK_SECRET
 
 
 def new_repair_order_id() -> str:
@@ -12,7 +12,7 @@ def new_repair_order_id() -> str:
 
 
 def change_status(
-    n8n_url, status, conversations, secret=EMPLOYEE_REPLY_SECRET, repair_order_id=None, name="Skoda Octavia: hamulce"
+    n8n_url, status, conversations, secret=N8N_HOOK_SECRET, repair_order_id=None, name="Skoda Octavia: hamulce"
 ) -> httpx.Response:
     """Вызов, который делает хук EspoCRM, когда мастер меняет статус Заказ-наряда:
     conversations — Беседы Клиента в CRM, [{channel, sender_id}]."""

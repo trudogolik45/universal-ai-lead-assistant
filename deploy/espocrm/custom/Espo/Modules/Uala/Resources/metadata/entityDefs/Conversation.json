@@ -20,6 +20,10 @@
         "contact": {
             "type": "link"
         },
+        "lastMessageAt": {
+            "type": "datetime",
+            "readOnly": true
+        },
         "description": {
             "type": "text"
         },
@@ -92,7 +96,7 @@
         }
     },
     "collection": {
-        "orderBy": "createdAt",
+        "orderBy": "lastMessageAt",
         "order": "desc"
     },
     "indexes": {
@@ -100,7 +104,11 @@
             "columns": ["name", "deleted"]
         },
         "channelSender": {
-            "columns": ["channel", "senderId", "deleted"]
+            "unique": true,
+            "columns": ["channel", "senderId", "deleteId"]
+        },
+        "lastMessageAt": {
+            "columns": ["lastMessageAt", "deleted"]
         },
         "assignedUser": {
             "columns": ["assignedUserId", "deleted"]
@@ -112,5 +120,6 @@
             "unique": true,
             "columns": ["createdAt", "id"]
         }
-    }
+    },
+    "deleteId": true
 }
