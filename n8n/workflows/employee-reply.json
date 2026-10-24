@@ -100,9 +100,9 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Сотрудник ответил в Беседе CRM: активная Беседа Клиента в Канале переходит в режим человека\n-- (Ассистент в ней молчит), Сообщение сотрудника ложится в историю с id записи CRM — retry\n-- не пишет его в CRM второй раз. Повтор того же Сообщения CRM Клиенту не уходит: строки нет.\nwith conversation as (\n  update conversations set status = 'handoff'\n  where id = (select id from conversations\n              where channel = $1 and sender_id = $2 and status in ('open', 'handoff')\n              order by last_message_at desc limit 1)\n    and not exists (select 1 from messages where crm_message_id = $4)\n  returning id, company_id\n),\nmessage as (\n  insert into messages (company_id, conversation_id, direction, text, crm_message_id)\n  select company_id, id, 'out', $3, $4 from conversation\n)\nselect id as conversation_id, $3 as text from conversation",
+        "query": "-- Сотрудник ответил в Беседе CRM: активная Беседа Клиента в Канале переходит в режим человека\n-- (Ассистент в ней молчит), Сообщение сотрудника ложится в историю с id записи CRM — retry\n-- не пишет его в CRM второй раз. company — Заказчик этой CRM: Клиент мог писать и другим Заказчикам. Повтор того же Сообщения CRM Клиенту не уходит: строки нет.\nwith conversation as (\n  update conversations set status = 'handoff'\n  where id = (select id from conversations\n              where channel = $1 and sender_id = $2 and status in ('open', 'handoff')\n                and ($5 = '' or company_id = (select id from companies where slug = $5))\n              order by last_message_at desc limit 1)\n    and not exists (select 1 from messages where crm_message_id = $4)\n  returning id, company_id\n),\nmessage as (\n  insert into messages (company_id, conversation_id, direction, text, crm_message_id)\n  select company_id, id, 'out', $3, $4 from conversation\n)\nselect id as conversation_id, $3 as text from conversation",
         "options": {
-          "queryReplacement": "={{ [$json.body.channel, $json.body.sender_id, $json.body.text, $json.body.crm_message_id] }}"
+          "queryReplacement": "={{ [$json.body.channel, $json.body.sender_id, $json.body.text, $json.body.crm_message_id, $json.body.company || ''] }}"
         }
       },
       "credentials": {
@@ -165,11 +165,13 @@
           "mappingMode": "defineBelow",
           "value": {
             "conversation_id": "={{ $json.conversation_id }}",
-            "text": "={{ $json.text }}"
+            "text": "={{ $json.text }}",
+            "retry": "={{ true }}"
           },
           "matchingColumns": [
             "conversation_id",
-            "text"
+            "text",
+            "retry"
           ],
           "schema": [
             {
@@ -190,6 +192,16 @@
               "display": true,
               "canBeUsedToMatch": true,
               "type": "string",
+              "removed": false
+            },
+            {
+              "id": "retry",
+              "displayName": "retry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
               "removed": false
             }
           ],

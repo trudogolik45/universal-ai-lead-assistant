@@ -10,10 +10,12 @@ import httpx
 import pytest
 
 from tests.espocrm import N8N_HOOK_SECRET
-from tests.factories import create_company
+from tests.factories import add_message, create_company, open_conversation
+from tests.fake_server import Response
 from tests.meta import MetaClient, messenger_payload, new_mid, new_wamid, whatsapp_payload
 from tests.openrouter import assistant_reply, completion_requests, respond_with
 from tests.polling import eventually, stays
+from tests.retry import run_retry, sending_stale
 
 PAGE_ID = "page-500"
 SEND_API_PATH = "/meta/me/messages"
@@ -40,12 +42,13 @@ def client(db, company):
     db.execute("select delete_client(%s, 'messenger', %s)", (company, sender_id))
 
 
-def employee_reply(n8n_url, sender_id, text, secret=N8N_HOOK_SECRET, channel="messenger") -> httpx.Response:
-    """Вызов, который делает хук EspoCRM, когда сотрудник пишет в Беседе."""
+def employee_reply(n8n_url, sender_id, text, secret=N8N_HOOK_SECRET, channel="messenger", company=None) -> httpx.Response:
+    """Вызов, который делает хук EspoCRM, когда сотрудник пишет в Беседе; company — slug Заказчика этой CRM."""
+    body = {"crm_message_id": uuid.uuid4().hex[:17], "channel": channel, "sender_id": sender_id, "text": text}
     return httpx.post(
         f"{n8n_url}/webhook/employee-reply",
         headers={"X-Uala-Secret": secret},
-        json={"crm_message_id": uuid.uuid4().hex[:17], "channel": channel, "sender_id": sender_id, "text": text},
+        json={**body, **({"company": company} if company else {})},
         timeout=10,
     )
 
@@ -134,3 +137,33 @@ def test_employee_reply_is_sent_to_client_in_whatsapp(db, n8n_url, fake, meta, c
         assert eventually(lambda: employee_message in [r.json() for r in fake.requests(WHATSAPP_SEND_PATH)])
     finally:
         db.execute("select delete_client(%s, 'whatsapp', %s)", (company, wa_id))
+
+
+def test_employee_reply_lost_to_channel_failure_is_sent_again_by_retry(db, n8n_url, fake, meta, client):
+    client_wrote(fake, meta, client)
+    fake.respond("POST", SEND_API_PATH, Response(500, {}), Response(200, {}))
+
+    employee_reply(n8n_url, client, "Auto gotowe do odbioru.")
+    eventually(lambda: len(sent_to(fake, client)) == 2)
+    sending_stale(db)
+    run_retry(n8n_url)
+
+    assert eventually(lambda: len(sent_to(fake, client)) == 3 and sent_to(fake, client))[2]["message"] == {
+        "text": "Auto gotowe do odbioru."
+    }
+
+
+def test_employee_reply_goes_to_client_of_own_company_only(db, n8n_url, fake, company):
+    """Один Клиент WhatsApp пишет двум Заказчикам: ответ сотрудника из CRM Заказчика уходит только от него."""
+    other = create_company(db, "Other Co")
+    wa_id = "48" + str(uuid.uuid4().int)[:9]
+    for company_id, phone_number_id in ((company, PHONE_NUMBER_ID), (other, "pnid-501")):
+        db.execute("update companies set whatsapp_phone_number_id = %s where id = %s", (phone_number_id, company_id))
+        add_message(db, company_id, open_conversation(db, company_id, sender_id=wa_id, channel="whatsapp"))
+    # У чужого Заказчика Клиент писал позже.
+    db.execute("update conversations set last_message_at = now() + interval '1 minute' where company_id = %s", (other,))
+
+    employee_reply(n8n_url, wa_id, "Auto gotowe.", channel="whatsapp", company="employee-co")
+
+    eventually(lambda: fake.requests(WHATSAPP_SEND_PATH))
+    stays(lambda: fake.requests("/meta/pnid-501/messages") == [])

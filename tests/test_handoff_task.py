@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from tests.factories import create_company
+from tests.factories import add_message, create_company, create_lead, open_conversation
 from tests.meta import MetaClient, messenger_payload
 from tests.openrouter import assistant_reply, completion_requests, respond_with
 from tests.polling import eventually, stays
@@ -116,3 +116,33 @@ def test_task_not_created_while_crm_failed_is_created_by_retry(db, fake, crm, me
 
     assert eventually(lambda: handoff_tasks(crm))[0]["assignedUserId"] == anna
     stays(lambda: len(handoff_tasks(crm)) == 1)
+
+
+def test_handoff_never_handed_to_crm_gets_task_from_retry(db, crm, n8n_url, company, client):
+    """Создание Задачи не началось вовсе: n8n перезапустился сразу после Передачи человеку."""
+    anna = employee(crm, "anna", team(crm, ADMINISTRATORS))
+    conversation = open_conversation(db, company, client, status="handoff")
+    add_message(db, company, conversation)
+    db.execute(
+        "update leads set status = 'needs_human', handoff_reason = 'Klient prosi o człowieka',"
+        " created_at = now() - interval '10 minutes' where id = %s",
+        (create_lead(db, company, conversation),),
+    )
+
+    run_retry(n8n_url)
+
+    assert eventually(lambda: handoff_tasks(crm))[0]["assignedUserId"] == anna
+
+
+def test_message_and_task_written_at_once_share_one_conversation(fake, crm, meta, client):
+    """Сообщение Клиента и Задача пишутся в CRM параллельно: оба не находят Беседу и создают её."""
+    employee(crm, "anna", team(crm, ADMINISTRATORS))
+    respond_with(fake, handoff_reply())
+
+    with crm.slow("Conversation", 3):
+        meta.post(messenger_payload(PAGE_ID, client, "Chcę rozmawiać z człowiekiem"))
+        task = eventually(lambda: handoff_tasks(crm), timeout=60)[0]
+
+    [conversation] = [c for c in crm.records("Conversation") if c["senderId"] == client]
+    assert task["parentId"] == conversation["id"]
+    assert eventually(lambda: crm.related("Conversation", conversation["id"], "messages"), timeout=60)

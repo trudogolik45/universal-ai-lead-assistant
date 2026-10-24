@@ -100,9 +100,9 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Куда сообщить Клиенту о ремонте: из его Бесед в CRM — та, где он писал последним. Клиент писал\n-- и в Messenger, и в WhatsApp — одно сообщение, а не два. Беседы нет в буфере — сообщать некуда.\nselect v.id as conversation_id, v.company_id, v.channel, co.name as company,\n  coalesce(v.language, co.default_language) as language, $2 as status\nfrom conversations v\njoin jsonb_to_recordset($1::jsonb) as c(channel text, sender_id text)\n  on c.channel = v.channel and c.sender_id = v.sender_id\njoin companies co on co.id = v.company_id\norder by v.last_message_at desc\nlimit 1",
+        "query": "-- Куда сообщить Клиенту о ремонте: из его Бесед в CRM — та, где он писал последним. Клиент писал\n-- и в Messenger, и в WhatsApp — одно сообщение, а не два. Беседы нет в буфере — сообщать некуда.\nselect v.id as conversation_id, v.company_id, v.channel, co.name as company,\n  coalesce(v.language, co.default_language) as language, $2 as status\nfrom conversations v\njoin jsonb_to_recordset($1::jsonb) as c(channel text, sender_id text)\n  on c.channel = v.channel and c.sender_id = v.sender_id\njoin companies co on co.id = v.company_id\n-- Только Заказчик этой CRM: тот же Клиент WhatsApp мог писать и другим Заказчикам.\nwhere $3 = '' or co.slug = $3\norder by v.last_message_at desc\nlimit 1",
         "options": {
-          "queryReplacement": "={{ [JSON.stringify($json.body.conversations || []), $json.body.status] }}"
+          "queryReplacement": "={{ [JSON.stringify($json.body.conversations || []), $json.body.status, $json.body.company || ''] }}"
         }
       },
       "credentials": {
@@ -146,12 +146,14 @@
           "value": {
             "conversation_id": "={{ $json.conversation_id }}",
             "text": "={{ $json.text }}",
-            "template": "={{ $json.template }}"
+            "template": "={{ $json.template }}",
+            "retry": "={{ true }}"
           },
           "matchingColumns": [
             "conversation_id",
             "text",
-            "template"
+            "template",
+            "retry"
           ],
           "schema": [
             {
@@ -182,6 +184,16 @@
               "display": true,
               "canBeUsedToMatch": true,
               "type": "object",
+              "removed": false
+            },
+            {
+              "id": "retry",
+              "displayName": "retry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
               "removed": false
             }
           ],
@@ -284,12 +296,14 @@
           "value": {
             "conversation_id": "={{ $json.conversation_id }}",
             "text": "={{ $json.text }}",
-            "template": "={{ $json.template }}"
+            "template": "={{ $json.template }}",
+            "retry": "={{ true }}"
           },
           "matchingColumns": [
             "conversation_id",
             "text",
-            "template"
+            "template",
+            "retry"
           ],
           "schema": [
             {
@@ -320,6 +334,16 @@
               "display": true,
               "canBeUsedToMatch": true,
               "type": "object",
+              "removed": false
+            },
+            {
+              "id": "retry",
+              "displayName": "retry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
               "removed": false
             }
           ],

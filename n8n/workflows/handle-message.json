@@ -362,11 +362,13 @@
           "mappingMode": "defineBelow",
           "value": {
             "conversation_id": "={{ $json.conversation_id }}",
-            "text": "={{ $json.reply }}"
+            "text": "={{ $json.reply }}",
+            "retry": "={{ true }}"
           },
           "matchingColumns": [
             "conversation_id",
-            "text"
+            "text",
+            "retry"
           ],
           "schema": [
             {
@@ -387,6 +389,16 @@
               "display": true,
               "canBeUsedToMatch": true,
               "type": "string",
+              "removed": false
+            },
+            {
+              "id": "retry",
+              "displayName": "retry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
               "removed": false
             }
           ],
@@ -985,11 +997,13 @@
           "mappingMode": "defineBelow",
           "value": {
             "conversation_id": "={{ $json.conversation_id }}",
-            "text": "={{ $json.text }}"
+            "text": "={{ $json.text }}",
+            "retry": "={{ true }}"
           },
           "matchingColumns": [
             "conversation_id",
-            "text"
+            "text",
+            "retry"
           ],
           "schema": [
             {
@@ -1010,6 +1024,16 @@
               "display": true,
               "canBeUsedToMatch": true,
               "type": "string",
+              "removed": false
+            },
+            {
+              "id": "retry",
+              "displayName": "retry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
               "removed": false
             }
           ],

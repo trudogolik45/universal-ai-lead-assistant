@@ -31,6 +31,14 @@
             {
               "name": "template",
               "type": "object"
+            },
+            {
+              "name": "retry",
+              "type": "boolean"
+            },
+            {
+              "name": "outbox_id",
+              "type": "string"
             }
           ]
         }
@@ -42,7 +50,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        220,
+        440,
         300
       ],
       "parameters": {
@@ -65,12 +73,12 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        440,
+        660,
         300
       ],
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Запрос в API Канала: { url, token_env, body }, для SMS — { url, token_env, form }. Токен узел отправки\n// берёт из $env[token_env], в данные выполнения он не попадает. Новый Канал = новая функция в CHANNELS.\nconst GRAPH = $env.META_GRAPH_BASE_URL;\n// Вне окна 24 часов WhatsApp принимает только шаблон «есть новости»: одобрен у Meta на pl и en\n// (docs/whatsapp-setup.md). Клиент отвечает на него — окно открывается снова.\nconst WHATSAPP_NEWS_TEMPLATE = 'news_update';\n\n// Messenger и Instagram Direct — один Send API Messenger Platform, токен страницы: Instagram —\n// страницы, связанной с аккаунтом Instagram. Вне окна 24 часов оба пускают только ответ человека\n// с меткой HUMAN_AGENT (до 7 дней). Ответ Ассистента всегда в окне: он идёт сразу за сообщением Клиента.\nfunction sendApi(token_env) {\n  return (m) => ({\n    url: `${GRAPH}/me/messages`,\n    token_env,\n    body: {\n      recipient: { id: m.sender_id },\n      ...(m.in_window ? { messaging_type: 'RESPONSE' } : { messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' }),\n      message: { text: m.text },\n    },\n  });\n}\n\nfunction whatsappTemplate(name, language, parameters = []) {\n  const body = parameters.length\n    ? { components: [{ type: 'body', parameters: parameters.map((text) => ({ type: 'text', text })) }] }\n    : {};\n  return { type: 'template', template: { name, language: { code: language === 'pl' ? 'pl' : 'en' }, ...body } };\n}\n\n// Автоматизация (на входе template) идёт своим одобренным шаблоном в любое время, а не текстом.\nfunction whatsappMessage(m) {\n  if (m.template) return whatsappTemplate(m.template.name, m.language, m.template.parameters);\n  if (m.in_window) return { type: 'text', text: { body: m.text } };\n  return whatsappTemplate(WHATSAPP_NEWS_TEMPLATE, m.language);\n}\n\nfunction whatsapp(m) {\n  return {\n    url: `${GRAPH}/${m.account_id}/messages`,\n    token_env: 'WHATSAPP_ACCESS_TOKEN',\n    body: { messaging_product: 'whatsapp', recipient_type: 'individual', to: m.sender_id, ...whatsappMessage(m) },\n  };\n}\n\n// Messenger и Instagram Автоматизации не пускают (после 24 часов — только человек): Клиенту оттуда\n// Автоматизация уходит SMS через SMSAPI на телефон Заявки. Поле отправителя — зарегистрированное\n// в SMSAPI; пусто — поле по умолчанию аккаунта.\nfunction sms(m) {\n  if (!m.phone) throw new Error('Нет телефона Клиента: SMS Автоматизации не отправить');\n  const form = { to: m.phone.replace(/^\\+/, ''), message: m.text, encoding: 'utf-8', format: 'json' };\n  if ($env.SMSAPI_SENDER) form.from = $env.SMSAPI_SENDER;\n  // URLSearchParams в песочнице Code-узла нет.\n  const encoded = Object.entries(form).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&');\n  return { url: `${$env.SMSAPI_BASE_URL}/sms.do`, token_env: 'SMSAPI_TOKEN', form: encoded };\n}\n\nconst CHANNELS = {\n  messenger: sendApi('META_PAGE_ACCESS_TOKEN'),\n  instagram: sendApi('INSTAGRAM_ACCESS_TOKEN'),\n  whatsapp,\n};\nconst template = $('Message to send').item.json.template;\nconst build = template && $json.channel !== 'whatsapp' ? sms : CHANNELS[$json.channel];\nif (!build) throw new Error(`Канал ${$json.channel}: отправка не поддерживается`);\nreturn { json: build({ ...$json, template }) };"
+        "jsCode": "// Запрос в API Канала: { url, token_env, body }, для SMS — { url, token_env, form }. Токен узел отправки\n// берёт из $env[token_env], в данные выполнения он не попадает. Новый Канал = новая функция в CHANNELS.\nconst GRAPH = $env.META_GRAPH_BASE_URL;\n// Вне окна 24 часов WhatsApp принимает только шаблон «есть новости»: одобрен у Meta на pl и en\n// (docs/whatsapp-setup.md). Клиент отвечает на него — окно открывается снова.\nconst WHATSAPP_NEWS_TEMPLATE = 'news_update';\n\n// Messenger и Instagram Direct — один Send API Messenger Platform, токен страницы: Instagram —\n// страницы, связанной с аккаунтом Instagram. Вне окна 24 часов оба пускают только ответ человека\n// с меткой HUMAN_AGENT (до 7 дней). Ответ Ассистента всегда в окне: он идёт сразу за сообщением Клиента.\nfunction sendApi(token_env) {\n  return (m) => ({\n    url: `${GRAPH}/me/messages`,\n    token_env,\n    body: {\n      recipient: { id: m.sender_id },\n      ...(m.in_window ? { messaging_type: 'RESPONSE' } : { messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' }),\n      message: { text: m.text },\n    },\n  });\n}\n\nfunction whatsappTemplate(name, language, parameters = []) {\n  const body = parameters.length\n    ? { components: [{ type: 'body', parameters: parameters.map((text) => ({ type: 'text', text })) }] }\n    : {};\n  return { type: 'template', template: { name, language: { code: language === 'pl' ? 'pl' : 'en' }, ...body } };\n}\n\n// Автоматизация (на входе template) идёт своим одобренным шаблоном в любое время, а не текстом.\nfunction whatsappMessage(m) {\n  if (m.template) return whatsappTemplate(m.template.name, m.language, m.template.parameters);\n  if (m.in_window) return { type: 'text', text: { body: m.text } };\n  return whatsappTemplate(WHATSAPP_NEWS_TEMPLATE, m.language);\n}\n\nfunction whatsapp(m) {\n  return {\n    url: `${GRAPH}/${m.account_id}/messages`,\n    token_env: 'WHATSAPP_ACCESS_TOKEN',\n    body: { messaging_product: 'whatsapp', recipient_type: 'individual', to: m.sender_id, ...whatsappMessage(m) },\n  };\n}\n\n// Messenger и Instagram Автоматизации не пускают (после 24 часов — только человек): Клиенту оттуда\n// Автоматизация уходит SMS через SMSAPI на телефон Заявки. Поле отправителя — зарегистрированное\n// в SMSAPI; пусто — поле по умолчанию аккаунта.\nfunction sms(m) {\n  if (!m.phone) throw new Error('Нет телефона Клиента: SMS Автоматизации не отправить');\n  const form = { to: m.phone.replace(/^\\+/, ''), message: m.text, encoding: 'utf-8', format: 'json' };\n  if ($env.SMSAPI_SENDER) form.from = $env.SMSAPI_SENDER;\n  // URLSearchParams в песочнице Code-узла нет.\n  const encoded = Object.entries(form).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&');\n  return { url: `${$env.SMSAPI_BASE_URL}/sms.do`, token_env: 'SMSAPI_TOKEN', form: encoded };\n}\n\nconst CHANNELS = {\n  messenger: sendApi('META_PAGE_ACCESS_TOKEN'),\n  instagram: sendApi('INSTAGRAM_ACCESS_TOKEN'),\n  whatsapp,\n};\nconst template = $('Queue message').item.json.template;\nconst build = template && $json.channel !== 'whatsapp' ? sms : CHANNELS[$json.channel];\nif (!build) throw new Error(`Канал ${$json.channel}: отправка не поддерживается`);\nreturn { json: build({ ...$json, template }) };"
       }
     },
     {
@@ -79,7 +87,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        880,
+        1100,
         400
       ],
       "parameters": {
@@ -108,7 +116,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        660,
+        880,
         300
       ],
       "parameters": {
@@ -141,7 +149,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        880,
+        1100,
         200
       ],
       "parameters": {
@@ -171,12 +179,169 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1100,
+        1320,
         200
       ],
       "parameters": {
         "mode": "runOnceForEachItem",
         "jsCode": "// SMSAPI сообщает об ошибке в теле ответа (error, message), не только кодом HTTP.\nif ($json.error) throw new Error(`SMSAPI ${$json.error}: ${$json.message}`);\nreturn { json: $json };"
+      }
+    },
+    {
+      "id": "28121cb1-bc89-4694-978f-811851924b61",
+      "name": "Queue message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Очередь отправки с повторами (спека #17). retry: отправку, которую больше никто не повторит (ответ\n-- Ассистента и сотрудника, статус ремонта), сначала кладём в outbox — не ушла, retry-leads пришлёт\n-- её снова с outbox_id. Автоматизации со своими повторами (напоминания, Сметы, маркетинг) идут мимо.\n-- Повтор берёт строку, только если она не отправлена и не в работе (попытка моложе 5 минут).\nwith queued as (\n  insert into outbox (conversation_id, text, template)\n  select nullif($1, '')::uuid, $2, nullif($3, '')::jsonb where $4 = 'true' and $5 = ''\n  returning id, conversation_id, text, template\n),\nretried as (\n  update outbox set claimed_at = now(), attempts = attempts + 1\n  where id = nullif($5, '')::uuid and sent_at is null and claimed_at < now() - interval '5 minutes'\n  returning id, conversation_id, text, template\n)\nselect id as outbox_id, conversation_id, text, template from queued\nunion all\nselect id, conversation_id, text, template from retried\nunion all\nselect null, nullif($1, '')::uuid, $2, nullif($3, '')::jsonb where $4 <> 'true' and $5 = ''",
+        "options": {
+          "queryReplacement": "={{ [$json.conversation_id || '', $json.text ?? '', $json.template ? JSON.stringify($json.template) : '', String($json.retry) === 'true' ? 'true' : 'false', $json.outbox_id || ''] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "2cb1ef05-6818-4ce3-b2eb-b9df9c0f1070",
+      "name": "Something to send",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "261c555a",
+              "leftValue": "={{ !!$json.conversation_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "60d050fe-cb4c-47dd-935f-dcb243d95fb9",
+      "name": "Mark sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1540,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Ушло Клиенту: строка очереди отправлена. Автоматизация (шаблон) ложится в Беседу исходящим\n-- Сообщением — его видят сотрудник в CRM (спека #17, «вся Беседа») и Ассистент в истории.\n-- Ответы Ассистента и сотрудника в Беседу уже записали те, кто их отправил.\nwith sent as (\n  update outbox set sent_at = now() where id = nullif($1, '')::uuid\n)\ninsert into messages (company_id, conversation_id, direction, text)\nselect v.company_id, v.id, 'out', $3 from conversations v\nwhere v.id = nullif($2, '')::uuid and $4 = 'true'\nreturning id as message_id",
+        "options": {
+          "queryReplacement": "={{ [$('Queue message').first().json.outbox_id || '', $('Queue message').first().json.conversation_id, $('Queue message').first().json.text, String(!!$('Queue message').first().json.template)] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "id": "b851f6d0-22d9-479e-8f40-4569796f0f71",
+      "name": "Write automation to CRM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1980,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmWriteMsg",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.message_id }}"
+          },
+          "matchingColumns": [
+            "message_id"
+          ],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e452100c-62b7-4a17-b902-734ca1e168b9",
+      "name": "Automation sent",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "f5f04f7a",
+              "leftValue": "={{ !!$json.message_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
       }
     }
   ],
@@ -185,7 +350,7 @@
       "main": [
         [
           {
-            "node": "Load recipient",
+            "node": "Queue message",
             "type": "main",
             "index": 0
           }
@@ -237,6 +402,72 @@
         [
           {
             "node": "SMS accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue message": {
+      "main": [
+        [
+          {
+            "node": "Something to send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Something to send": {
+      "main": [
+        [
+          {
+            "node": "Load recipient",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to channel": {
+      "main": [
+        [
+          {
+            "node": "Mark sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS accepted": {
+      "main": [
+        [
+          {
+            "node": "Mark sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark sent": {
+      "main": [
+        [
+          {
+            "node": "Automation sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Automation sent": {
+      "main": [
+        [
+          {
+            "node": "Write automation to CRM",
             "type": "main",
             "index": 0
           }
