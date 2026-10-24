@@ -1,4 +1,5 @@
-"""API-пользователь n8n в EspoCRM: роль с правами и пользователь с API-ключом; группы сотрудников с ролью.
+"""API-пользователь n8n в EspoCRM: роль с правами и пользователь с API-ключом; группы сотрудников с ролью;
+валюта — злотый (суммы Смет).
 
 Идемпотентно: роли, пользователь и команды ищутся по имени, права ролей перезаписываются
 из ROLE_ACL и STAFF_ACL.
@@ -48,8 +49,14 @@ STAFF_ACL = {
 }
 
 
+# Валюта сервиса в Польше. Список и валюты по умолчанию и базовая — вместе: без PLN в списке
+# EspoCRM падает на пересчёте курсов при каждом rebuild (поэтому не ESPOCRM_DEFAULT_CURRENCY).
+CURRENCY_SETTINGS = {"currencyList": ["PLN"], "defaultCurrency": "PLN", "baseCurrency": "PLN"}
+
+
 def bootstrap(admin: EspoCrm) -> str:
-    """Группы сотрудников и API-пользователь n8n; возвращает его API-ключ."""
+    """Валюта, группы сотрудников и API-пользователь n8n; возвращает его API-ключ."""
+    admin.request("PUT", "Settings", json=CURRENCY_SETTINGS)
     ensure_teams(admin)
     return ensure_api_user(admin)
 
