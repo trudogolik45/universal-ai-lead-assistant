@@ -52,3 +52,17 @@ def test_delete_client_keeps_other_clients_and_companies(db):
         (company,),
     ).fetchone()[0]
     assert instagram == 2
+
+
+def test_delete_client_erases_sent_marketing_reminders(db):
+    company = create_company(db)
+    conversation = open_conversation(db, company, sender_id="psid-1")
+    db.execute(
+        "insert into marketing_messages (company_id, channel, sender_id, campaign, conversation_id)"
+        " values (%s, 'messenger', 'psid-1', 'tyres:2026-autumn', %s)",
+        (company, conversation),
+    )
+
+    db.execute("select delete_client(%s, 'messenger', 'psid-1')", (company,))
+
+    assert db.execute("select count(*) from marketing_messages").fetchone()[0] == 0

@@ -72,7 +72,7 @@
       "typeVersion": 1,
       "position": [
         440,
-        500
+        4200
       ],
       "parameters": {
         "errorMessage": "={{ 'Переходник CRM не знает операцию ' + $json.operation }}"
@@ -669,7 +669,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Заявка в виде полей EspoCRM. Имя неизвестно — имя Беседы: без lastName CRM не пишет ни Клиента, ни Заявку.\n// Телефон не в международном формате CRM отвергает (400): такой не пишем, Заявка важнее.\n// В WhatsApp отправитель (wa_id) — номер Клиента без «+»: он телефон, если Клиент не назвал другой.\nconst d = $json.data;\nconst words = (d.name || '').trim().split(/\\s+/).filter(Boolean);\nconst phone = (d.phone || (d.channel === 'whatsapp' ? `+${d.sender_id}` : '')).replace(/[\\s().-]/g, '');\nconst vehicle = [d.vehicle_brand, d.vehicle_model].filter(Boolean).join(' ');\nreturn {\n  json: {\n    person: {\n      firstName: words.slice(0, -1).join(' ') || null,\n      lastName: words.at(-1) || `${d.channel} · ${d.sender_id}`,\n      ...(/^\\+[0-9]{8,15}$/.test(phone) ? { phoneNumber: phone } : {}),\n    },\n    vehicle: vehicle ? { name: vehicle, brand: d.vehicle_brand, model: d.vehicle_model } : null,\n    lead: { channel: d.channel, service: d.service, description: d.description, desiredTime: d.desired_date },\n  },\n};"
+        "jsCode": "// Заявка в виде полей EspoCRM. Имя неизвестно — имя Беседы: без lastName CRM не пишет ни Клиента, ни Заявку.\n// Телефон не в международном формате CRM отвергает (400): такой не пишем, Заявка важнее.\n// В WhatsApp отправитель (wa_id) — номер Клиента без «+»: он телефон, если Клиент не назвал другой.\nconst d = $json.data;\nconst words = (d.name || '').trim().split(/\\s+/).filter(Boolean);\nconst phone = (d.phone || (d.channel === 'whatsapp' ? `+${d.sender_id}` : '')).replace(/[\\s().-]/g, '');\nconst vehicle = [d.vehicle_brand, d.vehicle_model].filter(Boolean).join(' ');\nreturn {\n  json: {\n    person: {\n      firstName: words.slice(0, -1).join(' ') || null,\n      lastName: words.at(-1) || `${d.channel} · ${d.sender_id}`,\n      ...(/^\\+[0-9]{8,15}$/.test(phone) ? { phoneNumber: phone } : {}),\n      // Согласие на рекламу меняет только ответ Клиента; не отвечал — в CRM как было.\n      ...(typeof d.marketing_consent === 'boolean' ? { marketingConsent: d.marketing_consent } : {}),\n    },\n    vehicle: vehicle ? { name: vehicle, brand: d.vehicle_brand, model: d.vehicle_model } : null,\n    lead: { channel: d.channel, service: d.service, description: d.description, desiredTime: d.desired_date },\n  },\n};"
       },
       "id": "c7d2a1e0-0022-4000-8000-000000000002",
       "name": "CRM lead fields",
@@ -1905,6 +1905,192 @@
       }
     },
     {
+      "id": "c7d2a1e0-0033-4000-8000-000000000001",
+      "name": "Consented clients?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        4000
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c33con",
+              "leftValue": "={{ $json.operation === 'consented_clients' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c7d2a1e0-0033-4000-8000-000000000002",
+      "name": "Find consented contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        3900
+      ],
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Contact",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'isTrue', attribute: 'marketingConsent' } ], select: ['id'], maxSize: 200 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c7d2a1e0-0033-4000-8000-000000000003",
+      "name": "Anyone consented",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        3900
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c33any",
+              "leftValue": "={{ $json.list.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c7d2a1e0-0033-4000-8000-000000000004",
+      "name": "Find consented conversations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        3800
+      ],
+      "parameters": {
+        "url": "={{ $env.ESPOCRM_BASE_URL }}/api/v1/Conversation",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "searchParams",
+              "value": "={{ JSON.stringify({ where: [ { type: 'in', attribute: 'contactId', value: $json.list.map((c) => c.id) } ], select: ['channel', 'senderId'], maxSize: 200 }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.ESPOCRM_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c7d2a1e0-0033-4000-8000-000000000005",
+      "name": "Consented clients",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1320,
+        3800
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c33cli",
+              "name": "clients",
+              "type": "array",
+              "value": "={{ $json.list.map((c) => ({ channel: c.channel, sender_id: c.senderId })) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c7d2a1e0-0033-4000-8000-000000000006",
+      "name": "Nobody consented",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1100,
+        4000
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c33none",
+              "name": "clients",
+              "type": "array",
+              "value": "={{ [] }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
       "parameters": {
         "conditions": {
           "options": {
@@ -2608,7 +2794,7 @@
         ],
         [
           {
-            "node": "Unknown operation",
+            "node": "Consented clients?",
             "type": "main",
             "index": 0
           }
@@ -2620,6 +2806,64 @@
         [
           {
             "node": "Planned appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consented clients?": {
+      "main": [
+        [
+          {
+            "node": "Find consented contacts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find consented contacts": {
+      "main": [
+        [
+          {
+            "node": "Anyone consented",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anyone consented": {
+      "main": [
+        [
+          {
+            "node": "Find consented conversations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nobody consented",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find consented conversations": {
+      "main": [
+        [
+          {
+            "node": "Consented clients",
             "type": "main",
             "index": 0
           }
