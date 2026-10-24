@@ -82,6 +82,16 @@
             "entity": "Meeting",
             "foreign": "repairOrders"
         },
+        "estimates": {
+            "type": "hasMany",
+            "entity": "Estimate",
+            "foreign": "repairOrder"
+        },
+        "tasks": {
+            "type": "hasChildren",
+            "entity": "Task",
+            "foreign": "parent"
+        },
         "createdBy": {
             "type": "belongsTo",
             "entity": "User"

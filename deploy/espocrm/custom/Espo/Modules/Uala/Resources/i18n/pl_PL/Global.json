@@ -5,7 +5,8 @@
         "Vehicle": "Pojazd",
         "KnowledgeItem": "Wpis bazy wiedzy",
         "Lead": "Zgłoszenie",
-        "RepairOrder": "Zlecenie naprawy"
+        "RepairOrder": "Zlecenie naprawy",
+        "Estimate": "Kosztorys"
     },
     "scopeNamesPlural": {
         "Conversation": "Rozmowy",
@@ -13,6 +14,7 @@
         "Vehicle": "Pojazdy",
         "KnowledgeItem": "Baza wiedzy",
         "Lead": "Zgłoszenia",
-        "RepairOrder": "Zlecenia naprawy"
+        "RepairOrder": "Zlecenia naprawy",
+        "Estimate": "Kosztorysy"
     }
 }

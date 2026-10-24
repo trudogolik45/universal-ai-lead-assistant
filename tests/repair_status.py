@@ -11,7 +11,9 @@ def new_repair_order_id() -> str:
     return uuid.uuid4().hex[:17]
 
 
-def change_status(n8n_url, status, conversations, secret=EMPLOYEE_REPLY_SECRET, repair_order_id=None) -> httpx.Response:
+def change_status(
+    n8n_url, status, conversations, secret=EMPLOYEE_REPLY_SECRET, repair_order_id=None, name="Skoda Octavia: hamulce"
+) -> httpx.Response:
     """Вызов, который делает хук EspoCRM, когда мастер меняет статус Заказ-наряда:
     conversations — Беседы Клиента в CRM, [{channel, sender_id}]."""
     return httpx.post(
@@ -19,6 +21,7 @@ def change_status(n8n_url, status, conversations, secret=EMPLOYEE_REPLY_SECRET, 
         headers={"X-Uala-Secret": secret},
         json={
             "crm_repair_order_id": repair_order_id or new_repair_order_id(),
+            "name": name,
             "status": status,
             "conversations": conversations,
         },

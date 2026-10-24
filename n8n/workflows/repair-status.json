@@ -331,6 +331,175 @@
         }
       },
       "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('Repair status changed').first().json.body.status === 'Accepted' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Car accepted",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        500
+      ],
+      "id": "9c4e3a20-0000-4000-8031-000000000001"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Задача «составить Смету» на Заказ-наряд одна: машину могут принять повторно (статус сменили\n-- туда и обратно). Строки нет — задача уже создана или создаётся сейчас: поток останавливается.\ninsert into estimate_tasks (crm_repair_order_id) values ($1)\non conflict (crm_repair_order_id) do update set claimed_at = now()\nwhere estimate_tasks.crm_task_id is null and estimate_tasks.claimed_at < now() - interval '5 minutes'\nreturning crm_repair_order_id",
+        "options": {
+          "queryReplacement": "={{ [$('Repair status changed').first().json.body.crm_repair_order_id] }}"
+        }
+      },
+      "name": "Claim estimate task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        500
+      ],
+      "id": "9c4e3a20-0000-4000-8031-000000000002",
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$json.crm_repair_order_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Estimate task claimed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        500
+      ],
+      "id": "9c4e3a20-0000-4000-8031-000000000003"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "uala0crmAdapter0",
+          "mode": "id"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "create_task",
+            "data": "={{ { kind: 'estimate', parent_type: 'RepairOrder', parent_id: $json.crm_repair_order_id, name: 'Kosztorys: ' + $('Repair status changed').first().json.body.name, description: 'Samochód przyjęty do serwisu. Przygotuj kosztorys naprawy w zleceniu i ustaw jego status na «Gotowy» — kosztorys sam trafi do klienta.' } }}"
+          },
+          "matchingColumns": [
+            "operation",
+            "data"
+          ],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "name": "Create estimate task",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        500
+      ],
+      "id": "9c4e3a20-0000-4000-8031-000000000004",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update estimate_tasks set crm_task_id = $2 where crm_repair_order_id = $1",
+        "options": {
+          "queryReplacement": "={{ [$('Claim estimate task').first().json.crm_repair_order_id, $json.crm_task_id] }}"
+        }
+      },
+      "name": "Mark estimate task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1540,
+        500
+      ],
+      "id": "9c4e3a20-0000-4000-8031-000000000005",
+      "credentials": {
+        "postgres": {
+          "id": "uala0postgres001",
+          "name": "Supabase"
+        }
+      }
     }
   ],
   "connections": {
@@ -368,6 +537,11 @@
         [
           {
             "node": "Find client conversation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Car accepted",
             "type": "main",
             "index": 0
           }
@@ -430,6 +604,50 @@
         [
           {
             "node": "Send rating request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Car accepted": {
+      "main": [
+        [
+          {
+            "node": "Claim estimate task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim estimate task": {
+      "main": [
+        [
+          {
+            "node": "Estimate task claimed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Estimate task claimed": {
+      "main": [
+        [
+          {
+            "node": "Create estimate task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create estimate task": {
+      "main": [
+        [
+          {
+            "node": "Mark estimate task",
             "type": "main",
             "index": 0
           }

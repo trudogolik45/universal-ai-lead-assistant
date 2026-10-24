@@ -6,8 +6,8 @@
 
 ## Последний полный прогон
 
-- Дата: 2026-10-24, ветка `spec-17-32-repair-rating` (от `spec-17` после #33), команда `uv run pytest`.
-- Результат: **255 passed, 4 failed** за 598 с; упали test_migrate (новая таблица `repair_ratings` не в списке — поправлен) и три test_owner_report (фейк-сервер отказал в соединении под нагрузкой хоста); их файлы перепрогнаны вместе с test_n8n_sync: 18 passed.
+- Дата: 2026-10-24, ветка `spec-17` после слияния #32 и #31, команда `uv run pytest`.
+- Результат: **285 passed, 3 failed** за 646 с; упали три `test_owner_report.py` (не дождались письма в mailpit под нагрузкой хоста). Перепрогон файла: все три прошли.
 
 ## Сценарии спеки → тесты
 
@@ -69,6 +69,8 @@
 | Согласие на рекламу, ТО и шины (#33): Ассистент один раз на Клиента спрашивает Согласие при Записи (без календаря — при собранной Заявке), ответ и «STOP» ложатся в `Contact.marketingConsent`; напоминания о ТО через 11 месяцев после Записи и о сезоне шин (весна — летние, осень — зимние) уходят только Клиентам с Согласием, каждый повод один раз, WhatsApp — шаблоном, Messenger и Instagram — SMS; отказавшемуся больше не уходит; ручной запуск только с секретом | `test_marketing.py` (15), `test_delete_client.py::test_delete_client_erases_sent_marketing_reminders` | passed |
 | Согласие в настоящей EspoCRM (#33): API-пользователь находит Беседы Клиентов с Согласием на рекламу | `test_espocrm.py::test_api_user_finds_conversations_of_consented_clients_as_crm_adapter_does` | passed |
 | Отзывы после ремонта (#32): закрытие Заказ-наряда — один раз запрос оценки 1–5 (WhatsApp — шаблон `repair_rating_request` с кнопками, Messenger и Instagram — SMS «odpisz cyfrą»); 4–5 кнопкой или текстом — ссылка на отзыв в Google из `companies.google_review_url` на pl или en; 1–3 — извинение и Задача человеку «Zła ocena naprawy» администраторам, при недоступной CRM — через retry; цифра без запроса и вторая цифра — Ассистенту; `delete_client` стирает оценки | `test_repair_rating.py` (9), `test_delete_client.py::test_delete_client_erases_repair_ratings` | passed |
+| Смета (#31): машину приняли — Задача «составить Смету» наименее загруженному мастеру к Заказ-наряду, одна на Заказ-наряд; готовая Смета — Клиенту из WhatsApp шаблоном `estimate_ready` с названием и суммой, из Messenger и Instagram — SMS на pl или en, черновик не уходит; Клиент молчит — уточнение через сутки и ещё через двое, ещё через двое — Задача «Klient milczy» администратору, дальше ничего; ответ Клиента в Канал Беседы (и в новой Беседе) и смена статуса Сметы сотрудником останавливают цепочку; снова «Gotowy» — Смета уходит заново; неотправленная уходит следующим запуском; чужой секрет отклоняется | `test_estimate.py` (24) | passed |
+| Смета в настоящей EspoCRM (#31): Смета Заказ-наряда с суммой в PLN, без Заказ-наряда и с чужим статусом — 400; смена статуса вызывает n8n с суммой и Беседами Клиента Заказ-наряда, сохранение без смены — нет; Задача к Заказ-наряду уведомляет мастера; хук Заказ-наряда шлёт его название | `test_espocrm.py::test_mechanic_writes_estimate_of_repair_order_with_amount`, `test_estimate_needs_repair_order_and_known_status`, `test_estimate_ready_calls_n8n_with_amount_and_client_conversations`, `test_estimate_saved_without_status_change_does_not_call_n8n`, `test_estimate_task_links_to_repair_order_and_notifies_assigned_mechanic`, `test_mechanic_changing_repair_status_calls_n8n_with_status_and_client_conversations` | passed |
 | Фейк EspoCRM повторяет REST API: CRUD, обязательные поля, поиск `equals`/`notEquals`/`in`/`lessThan`/`greaterThan`/`greaterThanOrEquals`/`linkedWith`, `total` сверх `maxSize`, телефон в международном формате, связи (в том числе многие-ко-многим), 401 без ключа, 503 при недоступности CRM или одной сущности, медленная сущность | `test_fake_espocrm.py` (19) | passed |
 
 Флаки «не дождались за 30 с» в случайных тестах (запоздалый запрос предыдущего теста) — одна причина: фейк закрывал соединение первым, TIME_WAIT

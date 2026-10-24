@@ -284,7 +284,7 @@
         600
       ],
       "parameters": {
-        "jsCode": "// Задача человеку: вид → группа (команда EspoCRM). Команды заводит scripts/espocrm_bootstrap.py,\n// сотрудников в них добавляет Заказчик в админке CRM.\nconst TEAM_BY_KIND = { handoff: 'Administratorzy', bad_rating: 'Administratorzy' };\nconst kind = $('CRM operation').first().json.data.kind;\nif (!TEAM_BY_KIND[kind]) {\n  throw new Error(`Переходник CRM не знает вид Задачи человеку ${kind}`);\n}\nreturn [{ json: { team: TEAM_BY_KIND[kind] } }];"
+        "jsCode": "// Задача человеку: вид → группа (команда EspoCRM). Команды заводит scripts/espocrm_bootstrap.py,\n// сотрудников в них добавляет Заказчик в админке CRM.\nconst TEAM_BY_KIND = {\n  handoff: 'Administratorzy',\n  bad_rating: 'Administratorzy',\n  estimate: 'Mechanicy',\n  estimate_silent: 'Administratorzy',\n};\nconst kind = $('CRM operation').first().json.data.kind;\nif (!TEAM_BY_KIND[kind]) {\n  throw new Error(`Переходник CRM не знает вид Задачи человеку ${kind}`);\n}\nreturn [{ json: { team: TEAM_BY_KIND[kind] } }];"
       }
     },
     {
@@ -595,7 +595,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: $('CRM operation').first().json.data.name, description: $('CRM operation').first().json.data.description, status: 'Not Started', parentType: 'Conversation', parentId: $json.list ? $json.list[0].id : $json.id, assignedUserId: $('Least busy').first().json.assigned_user_id, teamsIds: [$('Find team').first().json.list[0].id] }) }}",
+        "jsonBody": "={{ JSON.stringify({ name: $('CRM operation').first().json.data.name, description: $('CRM operation').first().json.data.description, status: 'Not Started', parentType: $('CRM operation').first().json.data.parent_type || 'Conversation', parentId: $('CRM operation').first().json.data.parent_id || ($json.list ? $json.list[0].id : $json.id), assignedUserId: $('Least busy').first().json.assigned_user_id, teamsIds: [$('Find team').first().json.list[0].id] }) }}",
         "options": {
           "timeout": 10000
         }
@@ -2089,6 +2089,39 @@
         },
         "options": {}
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$('CRM operation').first().json.data.parent_type }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Task parent given",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        400
+      ],
+      "id": "c7d2a1e0-0031-4000-8000-000000000001"
     }
   ],
   "connections": {
@@ -2267,7 +2300,7 @@
       "main": [
         [
           {
-            "node": "Find task conversation",
+            "node": "Task parent given",
             "type": "main",
             "index": 0
           }
@@ -2831,6 +2864,24 @@
         [
           {
             "node": "Consented clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task parent given": {
+      "main": [
+        [
+          {
+            "node": "Create task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find task conversation",
             "type": "main",
             "index": 0
           }

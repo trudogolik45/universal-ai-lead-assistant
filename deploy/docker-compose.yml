@@ -69,11 +69,12 @@ services:
       ESPOCRM_CONFIG_WEB_SOCKET_URL: wss://${ESPOCRM_DOMAIN}/ws
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: tcp://*:7777
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: tcp://espocrm-websocket:7777
-      # Ответ сотрудника, закрытая Задача человеку и статус Заказ-наряда: хуки модуля Uala зовут n8n
-      # по compose-сети.
+      # Ответ сотрудника, закрытая Задача человеку, статус Заказ-наряда и Сметы: хуки модуля Uala
+      # зовут n8n по compose-сети.
       ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_URL: http://n8n:5678/webhook/employee-reply
       ESPOCRM_CONFIG_UALA_TASK_DONE_URL: http://n8n:5678/webhook/task-done
       ESPOCRM_CONFIG_UALA_REPAIR_STATUS_URL: http://n8n:5678/webhook/repair-status
+      ESPOCRM_CONFIG_UALA_ESTIMATE_URL: http://n8n:5678/webhook/estimate
       ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_SECRET: ${EMPLOYEE_REPLY_SECRET:?EMPLOYEE_REPLY_SECRET не задан}
     ports:
       - "127.0.0.1:8080:80"

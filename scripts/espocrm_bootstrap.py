@@ -1,4 +1,5 @@
-"""API-пользователь n8n в EspoCRM: роль с правами и пользователь с API-ключом; группы сотрудников с ролью.
+"""API-пользователь n8n в EspoCRM: роль с правами и пользователь с API-ключом; группы сотрудников с ролью;
+валюта — злотый (суммы Смет).
 
 Идемпотентно: роли, пользователь и команды ищутся по имени, права ролей перезаписываются
 из ROLE_ACL и STAFF_ACL.
@@ -21,7 +22,9 @@ READ_ONLY = {"create": "no", "read": "all", "edit": "no", "delete": "no", "strea
 ROLE_ACL = {
     **{
         entity: RECORD_ACCESS
-        for entity in ("Contact", "Conversation", "Message", "Vehicle", "Lead", "Meeting", "Task", "RepairOrder")
+        for entity in (
+            "Contact", "Conversation", "Message", "Vehicle", "Lead", "Meeting", "Task", "RepairOrder", "Estimate"
+        )
     },
     "KnowledgeItem": READ_ONLY,
     # Назначение Задачи человеку: n8n ищет сотрудников группы и их открытые задачи.
@@ -35,19 +38,25 @@ ROLE_ACL = {
 TEAMS = ("Administratorzy", "Mechanicy")
 STAFF_ROLE_NAME = "Pracownicy"
 # Роль групп: сотрудник видит Задачи человеку своей группы (без права чтения EspoCRM не шлёт ему
-# уведомление о назначенной задаче), Беседы и Клиентов, пишет в Беседу и ведёт Заказ-наряды.
+# уведомление о назначенной задаче), Беседы и Клиентов, пишет в Беседу и ведёт Заказ-наряды и Сметы.
 STAFF_ACL = {
     "Task": {"create": "yes", "read": "team", "edit": "team", "delete": "no", "stream": "team"},
     **{
         entity: RECORD_ACCESS
-        for entity in ("Contact", "Conversation", "Message", "Vehicle", "Lead", "Meeting", "RepairOrder")
+        for entity in ("Contact", "Conversation", "Message", "Vehicle", "Lead", "Meeting", "RepairOrder", "Estimate")
     },
     "KnowledgeItem": READ_ONLY,
 }
 
 
+# Валюта сервиса в Польше. Список и валюты по умолчанию и базовая — вместе: без PLN в списке
+# EspoCRM падает на пересчёте курсов при каждом rebuild (поэтому не ESPOCRM_DEFAULT_CURRENCY).
+CURRENCY_SETTINGS = {"currencyList": ["PLN"], "defaultCurrency": "PLN", "baseCurrency": "PLN"}
+
+
 def bootstrap(admin: EspoCrm) -> str:
-    """Группы сотрудников и API-пользователь n8n; возвращает его API-ключ."""
+    """Валюта, группы сотрудников и API-пользователь n8n; возвращает его API-ключ."""
+    admin.request("PUT", "Settings", json=CURRENCY_SETTINGS)
     ensure_teams(admin)
     return ensure_api_user(admin)
 

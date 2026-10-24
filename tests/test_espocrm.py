@@ -12,7 +12,7 @@ from scripts.espocrm import EspoCrm
 from scripts.espocrm_bootstrap import API_USER, ensure_api_user
 from scripts.espocrm_knowledge import DEMO_CALENDAR, seed_calendar, seed_knowledge
 from tests.booking import WORKING_CALENDAR_NODE, WORKING_RANGES_NODE, adapter_query, busy_where
-from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET, REPAIR_STATUS_PATH, TASK_DONE_PATH
+from tests.espocrm import EMPLOYEE_REPLY_PATH, EMPLOYEE_REPLY_SECRET, ESTIMATE_PATH, REPAIR_STATUS_PATH, TASK_DONE_PATH
 from tests.knowledge import assistant_knowledge_query
 from tests.marketing import consented_where, conversations_of_where
 from tests.owner_report import report_where
@@ -697,6 +697,7 @@ def test_mechanic_changing_repair_status_calls_n8n_with_status_and_client_conver
     ])
     assert call.headers["X-Uala-Secret"] == EMPLOYEE_REPLY_SECRET
     body = call.json()
+    assert body["name"] == "Skoda Octavia: wymiana sprzęgła"
     assert sorted(body["conversations"], key=lambda c: c["channel"]) == conversations
 
 
@@ -708,3 +709,81 @@ def test_repair_order_saved_without_status_change_does_not_call_n8n(espocrm, fak
     espocrm.admin.update("RepairOrder", order["id"], {"description": "Klient prosi o telefon przed wymianą."})
 
     stays(lambda: repair_statuses(fake) == [])
+
+
+def test_estimate_task_links_to_repair_order_and_notifies_assigned_mechanic(espocrm):
+    order, _ = repair_order(espocrm)
+    user = employee(espocrm, "Mechanicy")
+
+    task = espocrm.api.create(
+        "Task",
+        {"name": "Kosztorys: Skoda Octavia: wymiana sprzęgła", "status": "Not Started",
+         "parentType": "RepairOrder", "parentId": order["id"],
+         "assignedUserId": user["id"], "teamsIds": user["teamsIds"]},
+    )
+
+    assert [t["id"] for t in espocrm.api.related("RepairOrder", order["id"], "tasks")] == [task["id"]]
+    as_mechanic = EspoCrm(espocrm.url, admin=(user["userName"], EMPLOYEE_PASSWORD))
+    assert eventually(lambda: task["id"] in notified_records(as_mechanic))
+
+
+def estimate_calls(fake, estimate_id: str) -> list:
+    return [r for r in fake.requests(ESTIMATE_PATH) if r.json()["crm_estimate_id"] == estimate_id]
+
+
+def test_mechanic_writes_estimate_of_repair_order_with_amount(espocrm):
+    order, _ = repair_order(espocrm)
+    user = employee(espocrm, "Mechanicy")
+    as_mechanic = EspoCrm(espocrm.url, admin=(user["userName"], EMPLOYEE_PASSWORD))
+
+    estimate = as_mechanic.create(
+        "Estimate",
+        {"name": "Wymiana sprzęgła", "repairOrderId": order["id"], "amount": 1250.5, "amountCurrency": "PLN",
+         "description": "Sprzęgło LUK, robocizna 4 h"},
+    )
+
+    read = espocrm.api.read("Estimate", estimate["id"])
+    assert (read["status"], read["amount"], read["amountCurrency"]) == ("Draft", 1250.5, "PLN")
+    assert [e["id"] for e in espocrm.api.related("RepairOrder", order["id"], "estimates")] == [estimate["id"]]
+
+
+def test_estimate_needs_repair_order_and_known_status(espocrm):
+    order, _ = repair_order(espocrm)
+    without_order = {"name": "Kosztorys", "amount": 100, "amountCurrency": "PLN"}
+
+    assert espocrm.api.http.post("Estimate", json=without_order).status_code == 400
+    assert espocrm.api.http.post(
+        "Estimate", json={**without_order, "repairOrderId": order["id"], "status": "Sent"}
+    ).status_code == 400
+
+
+def test_estimate_ready_calls_n8n_with_amount_and_client_conversations(espocrm, fake):
+    order, conversations = repair_order(espocrm)
+    estimate = espocrm.admin.create(
+        "Estimate", {"name": "Wymiana sprzęgła", "repairOrderId": order["id"], "amount": 1250.5, "amountCurrency": "PLN"}
+    )
+    user = employee(espocrm, "Mechanicy")
+    as_mechanic = EspoCrm(espocrm.url, admin=(user["userName"], EMPLOYEE_PASSWORD))
+
+    as_mechanic.update("Estimate", estimate["id"], {"status": "Ready"})
+
+    [call] = eventually(lambda: [r for r in estimate_calls(fake, estimate["id"]) if r.json()["status"] == "Ready"])
+    assert call.headers["X-Uala-Secret"] == EMPLOYEE_REPLY_SECRET
+    body = call.json()
+    assert (body["crm_repair_order_id"], body["name"], body["amount"], body["currency"]) == (
+        order["id"], "Wymiana sprzęgła", 1250.5, "PLN"
+    )
+    assert sorted(body["conversations"], key=lambda c: c["channel"]) == conversations
+
+
+def test_estimate_saved_without_status_change_does_not_call_n8n(espocrm, fake):
+    order, _ = repair_order(espocrm)
+    estimate = espocrm.admin.create(
+        "Estimate", {"name": "Hamulce", "repairOrderId": order["id"], "amount": 400, "amountCurrency": "PLN"}
+    )
+    eventually(lambda: estimate_calls(fake, estimate["id"]))
+    fake.reset()
+
+    espocrm.admin.update("Estimate", estimate["id"], {"description": "Klocki i tarcze"})
+
+    stays(lambda: estimate_calls(fake, estimate["id"]) == [])

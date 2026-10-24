@@ -77,6 +77,7 @@ services:
       RETRY_SCHEDULE_CRON: ${RETRY_SCHEDULE_CRON:-0 0 1 1 *}
       REMINDER_SCHEDULE_CRON: ${REMINDER_SCHEDULE_CRON:-0 0 1 1 *}
       MARKETING_SCHEDULE_CRON: ${MARKETING_SCHEDULE_CRON:-0 0 1 1 *}
+      ESTIMATE_SCHEDULE_CRON: ${ESTIMATE_SCHEDULE_CRON:-0 0 1 1 *}
       # Внешние API — фейк-сервер pytest на хосте (tests/fake_server.py).
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-http://host.docker.internal:9/openrouter}
       META_GRAPH_BASE_URL: ${META_GRAPH_BASE_URL:-http://host.docker.internal:9/meta}
@@ -120,11 +121,12 @@ services:
       ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: tcp://*:7777
       ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: tcp://espocrm-websocket:7777
-      # Ответ сотрудника, закрытая Задача и статус Заказ-наряда (хуки модуля Uala): контрактные тесты
-      # подставляют фейк-сервер.
+      # Ответ сотрудника, закрытая Задача, статус Заказ-наряда и Сметы (хуки модуля Uala): контрактные
+      # тесты подставляют фейк-сервер.
       ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_URL: ${EMPLOYEE_REPLY_URL:-http://n8n:5678/webhook/employee-reply}
       ESPOCRM_CONFIG_UALA_TASK_DONE_URL: ${TASK_DONE_URL:-http://n8n:5678/webhook/task-done}
       ESPOCRM_CONFIG_UALA_REPAIR_STATUS_URL: ${REPAIR_STATUS_URL:-http://n8n:5678/webhook/repair-status}
+      ESPOCRM_CONFIG_UALA_ESTIMATE_URL: ${ESTIMATE_URL:-http://n8n:5678/webhook/estimate}
       ESPOCRM_CONFIG_UALA_EMPLOYEE_REPLY_SECRET: test-employee-reply-secret
     volumes:
       - /var/www/html/data

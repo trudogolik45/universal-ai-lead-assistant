@@ -30,11 +30,12 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 | `write-message-to-crm` | вызов из других workflow | Сообщение из Postgres в Беседу Клиента в CRM через переходник; не вышло — остаётся недописанным (`messages.crm_message_id` пуст) для retry |
 | `write-lead-to-crm` | вызов из других workflow | Заявка из Postgres в CRM с Клиентом и Автомобилем через переходник; не вышло или Заявка изменилась во время записи — её дописывает retry (`crm_leads`) |
 | `employee-reply` | `POST /webhook/employee-reply` | Ответ сотрудника из EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа переходит в режим человека, Ассистент в ней молчит, текст — Клиенту через `send-to-client` |
-| `repair-status` | `POST /webhook/repair-status` | Мастер сменил статус Заказ-наряда в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): на «Przyjęty do serwisu», «Czeka na części», «Gotowy do odbioru» Клиенту уходит сообщение через `send-to-client` — шаблон WhatsApp или SMS; на «Zamknięte» — один раз запрос оценки ремонта 1–5 (`repair_ratings`); остальные статусы внутренние |
+| `repair-status` | `POST /webhook/repair-status` | Мастер сменил статус Заказ-наряда в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): на «Przyjęty do serwisu», «Czeka na części», «Gotowy do odbioru» Клиенту уходит сообщение через `send-to-client` — шаблон WhatsApp или SMS; на «Zamknięte» — один раз запрос оценки ремонта 1–5 (`repair_ratings`); остальные статусы внутренние. «Przyjęty do serwisu» — ещё Задача человеку «составить Смету» мастерам, одна на Заказ-наряд (`estimate_tasks`) |
+| `estimates` | `POST /webhook/estimate`; в рабочие часы раз в час; `POST /webhook/estimates` | Сотрудник сменил статус Сметы в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): «Gotowy» — Смета уходит Клиенту через `send-to-client` (шаблон `estimate_ready` или SMS), молчит — два уточнения (`estimate_reminder`) через сутки и ещё через двое, ещё через двое — Задача человеку «Klient milczy» администраторам; другой статус или ответ Клиента — цепочка стоит (`estimates`, `estimate_steps`) |
 | `task-done` | `POST /webhook/task-done` | Сотрудник закрыл Задачу «Передача человеку» в EspoCRM (хук модуля Uala, секрет `X-Uala-Secret`): Беседа снова у Ассистента, Заявка `collecting` или `qualified` по обязательным полям |
 | `create-rating-task` | вызов из других workflow | Оценка ремонта 1–3 → Задача человеку «разобраться» администраторам через переходник: оценка, Канал, телефон, Заказ-наряд; не вышло — остаётся без задачи (`repair_ratings.crm_task_id` пуст) для retry |
 | `create-handoff-task` | вызов из других workflow | Передача человеку → Задача человеку в CRM через переходник: сводка на польском, ссылка на Беседу; не вышло — остаётся без задачи (`leads.handoff_task_id` пуст) для retry |
-| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операции: `record_message` — найти или создать Беседу по Каналу и id Клиента, добавить Сообщение; `create_task` — Задача человеку (Task) к Беседе: вид → команда (`handoff`, `bad_rating` → `Administratorzy`), в команде — активный сотрудник с наименьшим числом открытых задач; `record_lead` — Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить, Запись Заявки — привязать к ним; `free_slots` — свободные слоты по рабочему календарю (`WorkingTimeCalendar`) и Записям (`Meeting`); `book_appointment` — Запись (`Meeting`) в слот, если он ещё свободен; `planned_appointments` — запланированные Записи с началом в ближайшие `hours` часов; `report` — сколько Заявок и Записей создано за период, всего и по Каналам; `consented_clients` — Канал и id Клиента в нём для каждой Беседы Клиентов с Согласием на рекламу |
+| `crm-adapter-espocrm` | вызов из других workflow | Переходник CRM, реализация EspoCRM REST API (`ESPOCRM_BASE_URL`, `ESPOCRM_API_KEY`). Операции: `record_message` — найти или создать Беседу по Каналу и id Клиента, добавить Сообщение; `create_task` — Задача человеку (Task) к Беседе или к записи `parent_type`/`parent_id` (Заказ-наряд): вид → команда (`handoff`, `bad_rating`, `estimate_silent` → `Administratorzy`, `estimate` → `Mechanicy`), в команде — активный сотрудник с наименьшим числом открытых задач; `record_lead` — Клиент Беседы (нет — создать и привязать), Автомобиль и Заявка — создать или обновить, Запись Заявки — привязать к ним; `free_slots` — свободные слоты по рабочему календарю (`WorkingTimeCalendar`) и Записям (`Meeting`); `book_appointment` — Запись (`Meeting`) в слот, если он ещё свободен; `planned_appointments` — запланированные Записи с началом в ближайшие `hours` часов; `report` — сколько Заявок и Записей создано за период, всего и по Каналам; `consented_clients` — Канал и id Клиента в нём для каждой Беседы Клиентов с Согласием на рекламу |
 | `book-appointment` | вызов из других workflow | Запись Клиента в выбранный Ассистентом слот: блокировка слота в Postgres (`slot_locks`) → Запись в CRM через переходник → `appointments`; слот занят — Записи нет |
 | `ai-alert` | вызов из других workflow | Алерт «AI не отвечает» в группу Telegram разработчиков (`ALERT_TELEGRAM_CHAT_ID`); Заказчик его не видит |
 | `owner-report` | каждый день и каждый понедельник в 7:00; `POST /webhook/owner-report` | Отчёт владельцу письмом на польском: Заявки, Записи и конверсия по каждому Каналу за вчера или прошлую неделю, цифры из CRM через переходник |
@@ -42,7 +43,7 @@ n8n (workflow в `n8n/workflows/`) + Postgres в Supabase (схема в `supaba
 
 Рядом работает EspoCRM на своём Postgres (`deploy/espocrm`, ADR 0001 и 0002). В её модуле Uala
 есть свои сущности: Беседа (`Conversation`), Сообщение (`Message`), Автомобиль (`Vehicle`),
-Заказ-наряд (`RepairOrder`, «Zlecenie naprawy») и База знаний (`KnowledgeItem`) — её Ассистент читает на каждое Сообщение. Запись — встроенная
+Заказ-наряд (`RepairOrder`, «Zlecenie naprawy»), Смета (`Estimate`, «Kosztorys») и База знаний (`KnowledgeItem`) — её Ассистент читает на каждое Сообщение. Запись — встроенная
 встреча `Meeting` со связью с Автомобилем; свободные слоты — по встроенному рабочему календарю
 (`WorkingTimeCalendar`), см. docs/knowledge-base.md.
 Заявка — встроенный `Lead` (по-польски «Zgłoszenie») со своими полями услуга (`service`), удобное время
@@ -266,6 +267,22 @@ EspoCRM, хук модуля Uala сразу зовёт `repair-status` с но�
 (`companies.google_review_url`, docs/knowledge-base.md; ссылки нет — просто спасибо), за 1–3 — извинение
 и Задача человеку «Zła ocena naprawy» группе `Administratorzy`. Оценка ставится один раз, следующая
 цифра — обычное Сообщение Ассистенту. Запрос и ответ на оценку в Беседу CRM не пишутся.
+
+### Смета
+
+Машину приняли («Przyjęty do serwisu») — `repair-status` даёт Задачу человеку «Kosztorys: <Заказ-наряд>»
+группе `Mechanicy` (наименее загруженному мастеру), задача висит на Заказ-наряде. Одна на Заказ-наряд:
+повторное «приняли» второй не даёт. Мастер заводит в Заказ-наряде Смету (`Estimate`: название, сумма,
+описание) и ставит ей статус «Gotowy» — хук модуля Uala сразу зовёт `estimates`, и Смета уходит Клиенту в
+Беседу, где он писал последним: из WhatsApp — шаблоном `estimate_ready` с названием и суммой, из
+Messenger и Instagram — SMS на телефон Заявки (pl или en). Клиент молчит — уточнение `estimate_reminder`
+через сутки и ещё одно через двое суток, ещё через двое — Задача человеку «Klient milczy po kosztorysie»
+группе `Administratorzy`. Уточнения идут по расписанию `ESTIMATE_SCHEDULE_CRON` (по умолчанию раз в час
+с 9 до 18, кроме воскресенья). Цепочка стоит, когда Клиент написал в Канал Беседы после Сметы или
+сотрудник сменил статус Сметы («Zaakceptowany», «Odrzucony», «Szkic»); снова «Gotowy» — Смета уходит
+заново. Ответ на SMS до нас не доходит: Клиент из Messenger и Instagram останавливает цепочку, только
+написав в Канал. Запустить сразу:
+`curl -X POST https://n8n.n3spark.io/webhook/estimates -H "X-Retry-Secret: $RETRY_WEBHOOK_SECRET"`.
 
 ### Алерт «AI не отвечает»
 

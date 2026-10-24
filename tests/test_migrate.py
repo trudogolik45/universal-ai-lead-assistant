@@ -25,4 +25,6 @@ def test_every_client_data_table_is_scoped_by_company(db):
         )
     }
 
-    assert scoped == {"conversations", "messages", "leads", "appointments", "slot_locks", "marketing_messages", "repair_ratings"}
+    assert scoped == {
+        "conversations", "messages", "leads", "appointments", "slot_locks", "marketing_messages", "repair_ratings", "estimates",
+    }
