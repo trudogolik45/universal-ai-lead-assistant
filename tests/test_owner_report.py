@@ -27,14 +27,10 @@ def appointment(crm, channel, created_at):
     crm.add("Meeting", {"name": "Wizyta", "status": "Planned", "channel": channel, "createdAt": created_at})
 
 
-# Под нагрузкой полного прогона письмо из n8n через SMTP доходило до Mailpit дольше 30 с.
-REPORT_TIMEOUT = 120
-
-
 def report(mailpit, subject):
     """Письмо отчёта с этой темой, последнее: хвост письма прошлого теста (оно ушло после очистки ящика)
     с другим периодом его не подменит."""
-    return eventually(lambda: [m for m in mailpit.messages() if m.subject == subject], timeout=REPORT_TIMEOUT)[-1]
+    return eventually(lambda: [m for m in mailpit.messages() if m.subject == subject])[-1]
 
 
 def test_daily_report_counts_previous_day_in_warsaw_time_per_channel(n8n_url, crm, mailpit):

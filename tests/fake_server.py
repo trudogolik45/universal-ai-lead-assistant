@@ -31,6 +31,12 @@ CONTAINER_HOST = "host.docker.internal"
 CLIENT_CLOSE_TIMEOUT = 60
 
 
+class Server(ThreadingHTTPServer):
+    # Очередь входящих соединений: по умолчанию 5. n8n шлёт запросы узла по всем items разом (отчёт
+    # владельцу — 10 запросов к CRM), лишние соединения сбрасывались — «connection closed unexpectedly».
+    request_queue_size = 128
+
+
 @dataclass
 class Request:
     method: str
@@ -54,7 +60,7 @@ class FakeServer:
         self._routes: dict[tuple[str, str], list[Response]] = {}
         self._mounts: dict[str, Callable[[Request], Response]] = {}
         self._requests: list[Request] = []
-        self._httpd = ThreadingHTTPServer(("0.0.0.0", 0), self._handler_class())
+        self._httpd = Server(("0.0.0.0", 0), self._handler_class())
         self.port = self._httpd.server_address[1]
 
     def start(self):
