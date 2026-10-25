@@ -1,0 +1,43 @@
+Proprietary License
+
+Copyright (c) 2026 Nikita Kovalenko (github.com/trudogolik45). All rights reserved.
+
+This repository and everything in it — source code, n8n workflows, database
+migrations, EspoCRM modules, scripts, tests and documentation (the "Software") —
+is proprietary and confidential. It is published for viewing only.
+
+You MAY:
+  - view the Software on GitHub.
+
+You MAY NOT, without prior written permission from the copyright holder:
+  - copy, clone, download or reproduce the Software, in whole or in part;
+  - modify, adapt, translate or create derivative works;
+  - use, run or deploy the Software, for any purpose, commercial or not;
+  - distribute, publish, sublicense, sell, rent or otherwise transfer it;
+  - use the Software, or any part of it, to train or evaluate machine learning
+    models.
+
+Forking on GitHub is allowed only as far as the GitHub Terms of Service
+require; a fork grants no rights beyond viewing.
+
+No license or other right is granted by implication, estoppel or otherwise.
+Any use not expressly allowed above is prohibited and infringes copyright.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR ITS USE.
+
+For licensing inquiries, contact the copyright holder via GitHub:
+https://github.com/trudogolik45
+
+---
+
+Проприетарная лицензия
+
+© 2026 Никита Коваленко (github.com/trudogolik45). Все права защищены.
+
+Код и документы этого репозитория открыты только для просмотра. Копировать,
+изменять, запускать, распространять и использовать их любым способом, в том
+числе для обучения моделей ИИ, без письменного разрешения правообладателя
+запрещено. При расхождении текстов действует английская версия.
